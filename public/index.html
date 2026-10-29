@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Passe ATS — CV alternance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- Progression -->
+  <nav class="stepper" aria-label="Étapes">
+    <ol class="wrap">
+      <li data-step="1" class="active"><span class="num">1</span>Dépose ton CV</li>
+      <li data-step="2"><span class="num">2</span>Affine avec l'offre</li>
+      <li data-step="3"><span class="num">3</span>Récupère CV et lettre</li>
+    </ol>
+  </nav>
+
+  <!-- Hero : dépôt du CV -->
+  <header class="hero" id="hero">
+    <div class="wrap hero-inner">
+      <div class="hero-text">
+        <p class="brand">Passe ATS · Alternance</p>
+        <h1>Ton CV passe-t-il les <span class="hl">robots recruteurs</span> ?</h1>
+        <p class="lead">Dépose ton CV : en moins d'une minute, tu sais s'il est lisible par les logiciels de tri des entreprises (ATS) et ce qui te fait rejeter.</p>
+        <ul class="perks">
+          <li>Verdict pour Workday, Taleo, SuccessFactors, Welcome to the Jungle…</li>
+          <li>CV corrigé et lettre d'alternance en PDF</li>
+          <li>Rien n'est inventé, tout reste modifiable</li>
+        </ul>
+      </div>
+
+      <div class="dropzone" id="drop" role="button" tabindex="0" aria-label="Déposer ou choisir ton CV">
+        <input type="file" id="cvFile" accept=".pdf,.docx" hidden />
+        <div class="drop-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+        </div>
+        <p class="drop-title" id="dropTitle">Glisse ton CV ici</p>
+        <p class="drop-sub">ou</p>
+        <span class="btn primary" aria-hidden="true">Choisir mon CV</span>
+        <p class="drop-formats">PDF ou Word (.docx) · 10 Mo max</p>
+      </div>
+
+      <div class="hero-compact">
+        <span class="file-pill">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+          <strong id="fileName"></strong>
+        </span>
+        <button class="btn secondary" id="changeCvBtn" type="button">Changer de CV</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- Résultat -->
+    <section id="results" class="card hidden">
+      <p class="eyebrow">Résultat de l'analyse</p>
+      <div class="scorebox">
+        <div class="gauge" id="gauge"><span id="scoreValue">0</span><small>/100</small></div>
+        <div>
+          <div class="verdict" id="verdict"></div>
+          <span class="context" id="context"></span>
+          <p id="summary"></p>
+          <div class="breakdown" id="breakdown"></div>
+        </div>
+      </div>
+
+      <h3>Verdict par logiciel ATS</h3>
+      <div class="ats-grid" id="atsGrid"></div>
+
+      <h3>Mots-clés</h3>
+      <p class="hint" id="keywordsHint"></p>
+      <div class="chips" id="keywords"></div>
+
+      <div class="grid2 top-gap">
+        <div>
+          <h3>Lecture technique du fichier</h3>
+          <ul class="checks" id="checks"></ul>
+        </div>
+        <div>
+          <h3>Problèmes à corriger</h3>
+          <ul class="issues" id="issues"></ul>
+        </div>
+      </div>
+
+      <details class="extra">
+        <summary>Conseils par section</summary>
+        <ul class="issues" id="sections"></ul>
+      </details>
+      <details class="extra">
+        <summary>Ce que l'ATS lit réellement dans ton fichier</summary>
+        <pre id="rawText"></pre>
+      </details>
+    </section>
+
+    <!-- Affinage -->
+    <section id="refine" class="card hidden">
+      <h2>Affiner le résultat</h2>
+      <p class="subtitle" id="refineIntro"></p>
+      <ul class="suggestions" id="suggestions"></ul>
+
+      <form id="refineForm" novalidate>
+        <fieldset class="offer">
+          <legend>L'offre d'alternance visée</legend>
+
+          <label for="offerUrl">Lien de l'annonce</label>
+          <div class="input-action">
+            <span class="input-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+            </span>
+            <input type="url" id="offerUrl" inputmode="url" autocomplete="off" placeholder="https://www.welcometothejungle.com/fr/companies/…/jobs/…" aria-describedby="urlHelp urlStatus" />
+            <button type="button" class="btn primary" id="importBtn">Importer l'annonce</button>
+          </div>
+          <p class="help" id="urlHelp">Colle le lien : l'annonce est récupérée automatiquement. Fonctionne avec la plupart des sites carrières (Greenhouse, Lever, Workday, Teamtailor…) et de nombreux sites d'emploi. LinkedIn et Indeed bloquent souvent la lecture : dans ce cas, colle le texte.</p>
+          <p class="status" id="urlStatus" role="status" aria-live="polite"></p>
+
+          <div class="or"><span>ou colle le texte de l'annonce</span></div>
+
+          <label for="jobOffer">Texte de l'annonce</label>
+          <textarea id="jobOffer" rows="8" placeholder="Missions, profil recherché, compétences, rythme…"></textarea>
+
+          <label for="company">Entreprise <span class="opt">optionnel</span></label>
+          <input type="text" id="company" placeholder="ex. Decathlon" />
+        </fieldset>
+
+        <details class="extra" id="profileBox">
+          <summary>Infos sur ton alternance <span class="opt">utilisées pour le CV et la lettre</span></summary>
+          <div class="grid2">
+            <label>Formation préparée <input type="text" data-profile="Formation préparée en alternance" placeholder="ex. BTS NDRC, Bachelor RH" /></label>
+            <label>École <input type="text" data-profile="École" placeholder="ex. IUT de Lyon" /></label>
+            <label>Rythme <input type="text" data-profile="Rythme de l'alternance" placeholder="ex. 3 semaines entreprise / 1 semaine école" /></label>
+            <label>Date de début <input type="text" data-profile="Date de début souhaitée" placeholder="ex. septembre 2027" /></label>
+            <label>Durée <input type="text" data-profile="Durée du contrat" placeholder="ex. 24 mois" /></label>
+            <label>Type de contrat <input type="text" data-profile="Type de contrat" placeholder="apprentissage ou professionnalisation" /></label>
+          </div>
+          <label>Autre chose à mettre en avant <textarea data-profile="Informations complémentaires" rows="2" placeholder="Outils maîtrisés non cités, permis B, mobilité, résultats chiffrés…"></textarea></label>
+        </details>
+
+        <div class="actions">
+          <button type="submit" class="btn secondary" id="reanalyzeBtn">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
+            Relancer l'analyse
+          </button>
+          <button type="button" class="btn primary big" id="adaptBtn">
+            Adapter mon CV et créer ma lettre
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14"/><path d="m13 6 6 6-6 6"/></svg>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- CV adapté et lettre -->
+    <section id="adapted" class="card hidden">
+      <h2>Ton CV adapté</h2>
+      <div class="compare" id="compare"></div>
+
+      <div class="notice" id="missingBox"></div>
+      <details class="extra" open>
+        <summary>Ce qui a été modifié</summary>
+        <ul id="changes"></ul>
+      </details>
+
+      <h3>Relis et corrige ton CV</h3>
+      <p class="hint">Tous les champs sont modifiables. Vérifie chaque ligne : tu dois pouvoir défendre tout ce qui est écrit en entretien.</p>
+      <div id="cvEditor"></div>
+
+      <div class="actions">
+        <button class="btn secondary" id="recheckBtn" type="button">Revérifier le score</button>
+        <button class="btn primary big" id="cvPdfBtn" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+          Télécharger le CV (PDF)
+        </button>
+      </div>
+
+      <h2 class="top-gap">Lettre de motivation</h2>
+      <div class="tabs" role="tablist">
+        <button class="tab active" role="tab" data-letter="cover_letter" type="button">Adaptée à cette candidature</button>
+        <button class="tab" role="tab" data-letter="cover_letter_template" type="button">Modèle réutilisable</button>
+      </div>
+      <p class="hint" id="letterHint"></p>
+      <div id="letterEditor"></div>
+      <div class="actions">
+        <button class="btn secondary" id="letterTxtBtn" type="button">Télécharger en texte (.txt)</button>
+        <button class="btn primary big" id="letterPdfBtn" type="button">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+          Télécharger la lettre (PDF)
+        </button>
+      </div>
+
+      <div class="actions">
+        <button class="btn link" id="backBtn" type="button">↑ Retour à l'analyse</button>
+        <button class="btn link" id="restartBtn" type="button">Nouvelle candidature</button>
+      </div>
+    </section>
+
+    <p class="disclaimer">Aucun outil ne peut accéder aux ATS réels des entreprises : le score simule leur fonctionnement (lecture du fichier, mots-clés, structure) à partir de leurs limites connues. Tes documents sont envoyés à des modèles d'IA gratuits via OpenRouter pour l'analyse et ne sont pas stockés par cette application. Les fournisseurs de modèles gratuits peuvent conserver les données envoyées : évite d'y laisser des informations très sensibles.</p>
+  </main>
+
+  <div class="overlay hidden" id="overlay"><div class="spinner"></div><p id="overlayText">Analyse en cours…</p></div>
+  <div class="toast hidden" id="toast" role="alert"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

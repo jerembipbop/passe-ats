@@ -1,0 +1,57 @@
+# Passe ATS — CV et lettre d'alternance
+
+Plateforme locale qui :
+
+1. **Vérifie si ton CV passe les ATS** (Workday, Taleo, SuccessFactors, iCIMS, Greenhouse, Lever, SmartRecruiters, Teamtailor, Welcome to the Jungle…) : tu glisses ton CV dans la page d'accueil et l'analyse générale démarre aussitôt. Selon le résultat, tu l'affines ensuite avec l'offre visée et les infos de ton alternance.
+2. **Adapte ton CV** à l'offre sans rien inventer, avec un éditeur pour tout relire.
+3. **Génère le CV en PDF** dans une mise en page lisible par tous les ATS, puis le relit comme un ATS pour confirmer le nouveau score.
+4. **Rédige ta lettre de motivation** pour l'offre, plus un **modèle réutilisable** avec des champs `[Entreprise]`, `[Poste]`… pour tes autres candidatures (PDF ou .txt).
+
+## Installation
+
+Il faut [Node.js](https://nodejs.org) 20 ou plus récent et une clé [OpenRouter](https://openrouter.ai/settings/keys) (gratuite).
+
+1. Crée une clé sur https://openrouter.ai/settings/keys.
+2. Ouvre le fichier `.env` et colle-la après `OPENROUTER_API_KEY=`.
+3. Dans ce dossier :
+
+```bash
+npm install
+npm start
+```
+
+4. Ouvre http://localhost:3000
+
+## Comment le score est calculé
+
+| Partie | Poids | Ce qui est mesuré |
+| --- | --- | --- |
+| Analyse IA | 40 % | L'IA étudie le texte extrait et les tests techniques, et juge chaque ATS selon ses limites connues |
+| Lisibilité du fichier | 30 % | Tests automatiques : texte extractible, e-mail, téléphone, sections standards, tableaux, icônes, nombre de pages |
+| Mots-clés | 30 % | Présence réelle des mots-clés de l'offre (et de leurs synonymes) dans le texte extrait |
+
+75 et plus : passe. 55 à 74 : incertain. Moins de 55 : rejet probable.
+
+Aucun outil n'a accès aux ATS réels des entreprises : le score est une simulation fondée sur leur fonctionnement connu.
+
+## Modèles d'IA utilisés
+
+Uniquement des modèles **gratuits** d'OpenRouter. La liste des modèles gratuits est relue toutes les heures, et les meilleurs sont essayés dans l'ordre (Nemotron 3 Ultra, Inkling, Nemotron 3.5 Super, Gemma 4…). Si un modèle est saturé, retiré ou répond mal, le suivant prend le relais automatiquement et le modèle défaillant est mis de côté quelques minutes.
+
+Pour imposer ta propre liste : `OPENROUTER_MODELS=modele1:free,modele2:free` dans `.env`.
+
+Limites des modèles gratuits :
+- **50 requêtes par jour** sur un compte sans crédit (1000 par jour dès 10 $ de crédit sur OpenRouter). Une candidature complète en utilise 2 ou 3.
+- Plus lents : 1 à 2 minutes pour l'analyse, 2 à 3 minutes pour le CV et la lettre.
+- Les fournisseurs de modèles gratuits peuvent conserver les données envoyées.
+
+## Structure
+
+- `server.js` : serveur Express et routes API
+- `lib/extract.js` : extraction du texte (PDF, Word) comme un ATS
+- `lib/atsChecks.js` : tests de lisibilité et couverture des mots-clés
+- `lib/ai.js` : consignes données à l'IA (analyse, adaptation, extraction d'annonce)
+- `lib/llm.js` : client OpenRouter et bascule entre modèles gratuits
+- `lib/jobOffer.js` : import d'une annonce à partir de son lien
+- `lib/pdf.js` : génération du CV et de la lettre en PDF
+- `public/` : interface web
