@@ -1,6 +1,7 @@
 import "dotenv/config";
 import express from "express";
 import multer from "multer";
+import JSZip from "jszip";
 import { extractCv } from "./lib/extract.js";
 import { runFormatChecks, keywordCoverage, combinedScore, verdictFor } from "./lib/atsChecks.js";
 import { analyzeCv, adaptCv } from "./lib/ai.js";
@@ -91,6 +92,16 @@ app.post("/api/letter/pdf", async (req, res) => {
   const pdf = await renderLetterPdf(letter, cv, template ? "[Entreprise]" : company);
   const name = template ? "Modele_lettre_alternance" : `Lettre_${safeName(company)}`;
   res.type("application/pdf").attachment(`${name}.pdf`).send(pdf);
+});
+
+// CV et lettre ensemble, dans une archive .zip.
+app.post("/api/bundle", async (req, res) => {
+  const { cv, letter, company } = req.body;
+  const zip = new JSZip();
+  zip.file(`CV_${safeName(cv?.full_name)}.pdf`, await renderCvPdf(cv));
+  zip.file(`Lettre_${safeName(company || "motivation")}.pdf`, await renderLetterPdf(letter, cv, company));
+  const archive = await zip.generateAsync({ type: "nodebuffer" });
+  res.type("application/zip").attachment(`Candidature_${safeName(company || cv?.full_name)}.zip`).send(archive);
 });
 
 // Aperçu du CV ou d'une lettre : le PDF exact qui sera téléchargé, en images.

@@ -187,8 +187,6 @@ ul.suggestions:empty { display: none; }
 ul.suggestions li { margin: 3px 0; }
 
 /* ---------- CV adapté ---------- */
-.compare { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: 15px; font-weight: 500; }
-.compare .pill { padding: 6px 14px; border-radius: 99px; font: 400 18px/1 var(--title); }
 .notice { background: var(--warn-soft); border-radius: 10px; padding: 12px 14px; margin: 16px 0; font-size: 14px; }
 .notice:empty { display: none; }
 
@@ -337,24 +335,8 @@ ul.plain .flag { color: var(--alert); }
 .questions ul.suggestions { margin: 0; padding: 0 0 0 20px; background: none; font-weight: 400; }
 .questions ul.suggestions li { margin: 4px 0; }
 
-/* Synthèse du CV adapté : scores et actions principales en haut. */
-.summary-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
-.summary-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.compare { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font-weight: 400; }
-.compare .score-step { display: flex; flex-direction: column; }
-.compare .score-step small { font-size: 12.5px; color: var(--muted); }
-.compare .score-step b { font: 400 30px/1.1 var(--title); }
-.compare .score-step.after b { color: var(--ok); }
-.compare .score-step.after.low b { color: var(--alert); }
-.compare .arrow { color: var(--muted); font-size: 20px; }
 .compare-note { margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
 
-.to-check { margin: 16px 0; padding: 14px 16px; border: 1px solid var(--alert); border-radius: 12px; background: var(--alert-soft); }
-.to-check:empty { display: none; }
-.to-check h3 { margin: 0 0 4px; font-size: 15px; color: var(--alert); }
-.to-check p { margin: 0 0 8px; font-size: 13.5px; color: var(--muted); }
-.to-check ul { margin: 0; padding-left: 20px; font-size: 14px; }
-.to-check li { margin: 3px 0; }
 
 h3.substep { display: flex; align-items: center; gap: 10px; font-size: 20px; margin-top: 32px; }
 h3.substep .num { width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
@@ -377,3 +359,68 @@ h3.substep .num { width: 30px; height: 30px; border-radius: 50%; background: var
 .actions-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .edit-panel { margin-top: 8px; padding: 4px 20px 20px; border: 2px solid var(--accent); border-radius: 14px; }
 @media (max-width: 640px) { .preview { padding: 10px; } .edit-panel { padding: 4px 14px 16px; } }
+
+/* ---------- Étape 3 : vérifier, relire, envoyer ---------- */
+.readability { padding: 14px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.readability:empty { display: none; }
+.readability-label { margin: 0 0 2px; font-size: 13px; color: var(--muted); }
+.readability-scores { margin: 0; display: flex; align-items: baseline; gap: 10px; }
+.readability-scores span { font: 400 26px/1 var(--title); color: var(--muted); }
+.readability-scores .arrow { font: 400 18px/1 var(--sans); }
+.readability-scores b { font: 400 34px/1 var(--title); color: var(--ok); }
+.readability-scores b.low { color: var(--alert); }
+.readability-scores small { color: var(--muted); }
+.readability .compare-note { max-width: 70ch; }
+
+ul.checklist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.check-item { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 12px 16px; border-bottom: 1px solid var(--line); background: #fff; }
+.check-item:last-child { border-bottom: 0; }
+.check-item.pending { border-left: 4px solid var(--alert); }
+.check-item.added { border-left: 4px solid var(--ok); background: var(--ok-soft); }
+.check-item.ignored { border-left: 4px solid var(--line-strong); }
+.check-item.ignored .check-keyword { color: var(--muted); text-decoration: line-through; }
+.check-text { flex: 1; min-width: 220px; }
+.check-keyword { margin: 0; font-weight: 500; }
+.check-reason { margin: 2px 0 0; font-size: 13.5px; color: var(--muted); }
+.check-actions { display: flex; align-items: center; gap: 4px; }
+.check-actions .btn { min-height: 38px; padding: 6px 14px; font-size: 14px; }
+.checklist-status:empty { display: none; }
+
+.doc-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.doc-bar .tabs { margin: 0; }
+
+/* Aperçu sans défilement imbriqué ; en édition, formulaire et aperçu côte à côte. */
+.preview { max-height: none; overflow: visible; }
+.workspace { display: block; }
+.workspace .editor-col { display: none; }
+.workspace.editing { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.workspace.editing .editor-col { display: block; }
+.workspace.editing .preview-col { position: sticky; top: 70px; }
+.workspace.editing .preview { padding: 12px; }
+@media (max-width: 860px) {
+  .workspace.editing { grid-template-columns: 1fr; }
+  .workspace.editing .preview-col { position: static; }
+}
+.edit-panel { margin: 0; padding: 0; border: 0; }
+.edit-title { margin: 0 0 12px; font-weight: 500; }
+.edit-title span:last-child { display: block; font-size: 13px; font-weight: 400; color: var(--muted); }
+.edit-actions { position: sticky; bottom: 0; margin-top: 12px; padding: 12px 0; background: #fff; border-top: 1px solid var(--line); }
+
+.send-box { padding: 18px 20px; border: 2px solid var(--accent); border-radius: 14px; }
+ul.send-status { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 6px; font-size: 14.5px; }
+ul.send-status li { display: flex; gap: 8px; }
+ul.send-status li::before { flex-shrink: 0; width: 20px; }
+ul.send-status li.ok::before { content: "✓"; color: var(--ok); }
+ul.send-status li.warn { color: var(--alert); }
+ul.send-status li.warn::before { content: "!"; font-weight: 500; text-align: center; }
+.send-actions .help { margin-top: 10px; }
+.send-secondary { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+
+.next-steps { margin-top: 32px; }
+.next-steps h3 { margin-top: 0; }
+.next-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 640px) { .next-grid { grid-template-columns: 1fr; } }
+.next-card { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.next-card-title { margin: 0; font-weight: 500; }
+.next-card-text { margin: 0 0 8px; font-size: 14px; color: var(--muted); flex: 1; }
+.next-card-actions { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }

@@ -2,10 +2,12 @@
 
 Plateforme locale qui :
 
-1. **Vérifie si ton CV passe les ATS** (Workday, Taleo, SuccessFactors, iCIMS, Greenhouse, Lever, SmartRecruiters, Teamtailor, Welcome to the Jungle…) : tu glisses ton CV dans la page d'accueil et l'analyse générale démarre aussitôt. Selon le résultat, tu l'affines ensuite avec l'offre visée et les infos de ton alternance.
-2. **Adapte ton CV** à l'offre sans rien inventer, avec un éditeur pour tout relire.
-3. **Génère le CV en PDF** dans une mise en page lisible par tous les ATS, puis le relit comme un ATS pour confirmer le nouveau score.
-4. **Rédige ta lettre de motivation** pour l'offre, plus un **modèle réutilisable** avec des champs `[Entreprise]`, `[Poste]`… pour tes autres candidatures (PDF ou .txt).
+1. **Vérifie si ton CV passe les ATS** (Workday, Taleo, SuccessFactors, iCIMS, Greenhouse, Lever, SmartRecruiters, Teamtailor, Welcome to the Jungle…) : tu glisses ton CV dans la page d'accueil et l'analyse générale démarre aussitôt. Selon le résultat, tu l'affines ensuite avec l'offre visée (texte ou lien de l'annonce) et les infos de ton alternance.
+2. **Adapte ton CV** à l'offre sans rien inventer. Les attentes de l'offre absentes de ton parcours sont listées à part : tu choisis de les ajouter seulement si tu les maîtrises.
+3. **Montre un aperçu fidèle** du CV et de la lettre, avec une modification côte à côte et un aperçu qui se met à jour pendant la frappe.
+4. **Génère le CV en PDF** lisible par tous les ATS, puis le relit comme un ATS pour mesurer sa lisibilité.
+5. **Rédige ta lettre de motivation** pour l'offre, à télécharger en PDF ou à copier dans un formulaire, plus un **modèle réutilisable** avec des champs `[Entreprise]`, `[Poste]`…
+6. **Prépare l'envoi** : CV et lettre ensemble dans un .zip, alerte s'il reste des [crochets] dans la lettre, et « Postuler à une autre offre » qui garde ton CV et tes infos.
 
 ## Installation
 

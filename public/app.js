@@ -650,144 +650,258 @@ function renderAdapted() {
   renderCvEditor(a.cv);
   $("#changes").innerHTML = a.changes.map((c) => `<li>${esc(c)}</li>`).join("");
   $("#changesSummary").textContent = `Ce qui a été modifié (${a.changes.length})`;
-  $("#missingBox").innerHTML = a.missing_not_added.length
-    ? `<h3>À vérifier avant d'envoyer</h3>
-       <p>Ces attentes de l'offre ne figurent pas dans ton parcours, donc rien n'a été ajouté. Ajoute-les dans l'éditeur seulement si tu les maîtrises.</p>
-       <ul>${a.missing_not_added.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>`
-    : "";
+
+  // Anciennes réponses : de simples phrases « Compétence : explication ».
+  state.checks = a.missing_not_added
+    .map((m) => {
+      if (typeof m !== "string") return m;
+      const keyword = m.split(/\s[:(]/)[0].trim();
+      return { keyword, reason: m.slice(keyword.length).replace(/^\s*[:(]\s*/, "").replace(/\)\s*$/, "") };
+    })
+    .filter((m) => m.keyword)
+    .map((m) => ({ ...m, status: "pending" }));
+
   state.letters = { cover_letter: a.cover_letter, cover_letter_template: a.cover_letter_template };
   state.letterKey = null;
   $("#letterEditor").innerHTML = "";
   showLetter("cover_letter");
+  renderChecklist();
   selectDoc("cv");
 }
 
+// Score « après » : uniquement ce qui se mesure sur le PDF, donc pas de verdict ATS ici.
 async function recheck() {
   try {
     const r = await api("/api/cv/check", { cv: readCv(), keywords: state.analysis.ai.keywords });
     const b = state.analysis.breakdown;
     const before = Math.round((b.format + b.motsCles) / 2);
     $("#compare").innerHTML = `
-      <div class="score-step"><small>Avant</small><b>${before}</b></div>
-      <span class="arrow" aria-hidden="true">→</span>
-      <div class="score-step after${r.score < 75 ? " low" : ""}"><small>Après</small><b>${r.score}</b></div>
-      <div>
-        <span class="verdict v-${r.verdict}">${VERDICT_LABEL[r.verdict]}</span>
-        <p class="compare-note">Score technique sur 100, mesuré en relisant le PDF généré : lisibilité ${b.format} → ${r.breakdown.format}, mots-clés ${b.motsCles} % → ${r.breakdown.motsCles} %.</p>
-      </div>`;
+      <p class="readability-label">Lisibilité ATS du CV</p>
+      <p class="readability-scores"><span>${before}</span><span class="arrow" aria-hidden="true">→</span><b class="${r.score < 75 ? "low" : ""}">${r.score}</b><small>/100</small></p>
+      <p class="compare-note">Mesure la lecture du fichier (${b.format} → ${r.breakdown.format}) et la présence des mots-clés de l'offre (${b.motsCles} % → ${r.breakdown.motsCles} %). Ce n'est pas une garantie d'entretien : c'est le fond de ton CV qui convaincra le recruteur.</p>`;
   } catch (e) {
     toast(e.message);
   }
 }
 
-$("#cvPdfTopBtn").addEventListener("click", () => download("/api/cv/pdf", { cv: readCv() }));
-$("#toLetterBtn").addEventListener("click", () => {
-  selectDoc("cover_letter");
-  scrollToEl("#previewTitle");
+// ---------- 1. Vérifier ce qui manque ----------
+function renderChecklist() {
+  const checks = state.checks;
+  show("#checkStep", checks.length > 0);
+  $("#reviewNum").textContent = checks.length ? "2" : "1";
+  $("#sendNum").textContent = checks.length ? "3" : "2";
+  $("#checklist").innerHTML = checks.map((c, i) => `
+    <li class="check-item ${c.status}">
+      <div class="check-text">
+        <p class="check-keyword">${esc(c.keyword)}</p>
+        ${(() => {
+          const text = c.status === "added" ? "Ajouté à ton CV, dans « Compétences ajoutées »." : c.status === "ignored" ? "Ignoré." : c.reason;
+          return text && text !== c.keyword ? `<p class="check-reason">${esc(text)}</p>` : "";
+        })()}
+      </div>
+      <div class="check-actions">
+        ${c.status === "pending"
+          ? `<button type="button" class="btn secondary" data-check="${i}" data-action="add">Je maîtrise, l'ajouter</button>
+             <button type="button" class="btn link" data-check="${i}" data-action="ignore">Ignorer</button>`
+          : `<button type="button" class="btn link" data-check="${i}" data-action="undo">Annuler</button>`}
+      </div>
+    </li>`).join("");
+  renderSendStatus();
+}
+
+$("#checklist").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("[data-check]");
+  if (!btn) return;
+  const check = state.checks[Number(btn.dataset.check)];
+  if (check.status === "added" || btn.dataset.action === "add") syncAddedSkill(check.keyword, btn.dataset.action === "add");
+  check.status = { add: "added", ignore: "ignored", undo: "pending" }[btn.dataset.action];
+  renderChecklist();
+  if (state.doc === "cv") refreshPreview();
+  recheck();
 });
 
-// ---------- Aperçu des documents, puis modification à la demande ----------
+// ---------- 2. Relire et ajuster : aperçu, édition côte à côte en direct ----------
 const DOCS = {
   cv: {
     name: "du CV",
     edit: "Modifier le CV",
-    download: "Télécharger le CV (PDF)",
     hint: () => "Ton CV tel qu'il sera téléchargé : une colonne et des titres standards, ce que les ATS lisent le mieux.",
   },
   cover_letter: {
     name: "de la lettre",
     edit: "Modifier la lettre",
-    download: "Télécharger la lettre (PDF)",
     hint: () => `Lettre rédigée pour ${state.company || "cette offre"}. Relis-la et personnalise-la avant de l'envoyer.`,
   },
   cover_letter_template: {
     name: "du modèle de lettre",
     edit: "Modifier le modèle",
-    download: "Télécharger le modèle (PDF)",
-    hint: () => "À réutiliser pour tes autres candidatures : remplace chaque passage entre [crochets].",
+    hint: () => "Modèle pour tes prochaines candidatures : remplace chaque passage entre [crochets].",
   },
 };
 const isLetter = (doc) => doc !== "cv";
-const editPanel = (doc) => $(isLetter(doc) ? "#letterEditPanel" : "#cvEditPanel");
+const isEditing = () => $("#workspace").classList.contains("editing");
 
 const letterBody = () => ({ letter: readLetter(), cv: readCv(), company: state.company, template: state.letterKey === "cover_letter_template" });
+// La lettre de cette candidature, même quand l'éditeur affiche le modèle.
+const currentLetter = () => (state.letterKey === "cover_letter" ? readLetter() : state.letters.cover_letter);
 
 async function refreshPreview() {
   const el = $("#preview");
   const doc = state.doc;
+  const ticket = (state.previewTicket = (state.previewTicket || 0) + 1);
   el.setAttribute("aria-busy", "true");
   try {
     const body = isLetter(doc) ? { type: "letter", ...letterBody() } : { type: "cv", cv: readCv() };
     const { pages } = await api("/api/preview", body);
-    if (doc !== state.doc) return; // l'utilisateur a changé d'onglet entre-temps
+    if (ticket !== state.previewTicket) return; // une version plus récente est en cours
     el.innerHTML = pages.map((p, i) => `
       <img src="${p.src}" width="${p.width}" height="${p.height}" alt="Aperçu ${DOCS[doc].name}, page ${i + 1} sur ${pages.length}" />
       ${pages.length > 1 ? `<p class="page-label">Page ${i + 1} sur ${pages.length}</p>` : ""}`).join("");
   } catch (e) {
     el.innerHTML = `<p class="preview-empty">L'aperçu n'a pas pu être généré : ${esc(e.message)}</p>`;
   } finally {
-    el.setAttribute("aria-busy", "false");
+    if (ticket === state.previewTicket) el.setAttribute("aria-busy", "false");
   }
 }
 
-function closeEditPanels() {
-  ["#cvEditPanel", "#letterEditPanel"].forEach((id) => show(id, false));
-  $("#editBtn").setAttribute("aria-expanded", "false");
+function setEditing(on) {
+  $("#workspace").classList.toggle("editing", on);
+  show("#cvEditPanel", on && !isLetter(state.doc));
+  show("#letterEditPanel", on && isLetter(state.doc));
+  $("#editBtn").setAttribute("aria-expanded", on);
+  $("#editBtn").classList.toggle("hidden", on);
 }
 
 function selectDoc(doc) {
-  closeEditPanels();
+  if (isEditing()) setEditing(false);
   state.doc = doc;
   document.querySelectorAll("[data-doc]").forEach((b) => {
     b.classList.toggle("active", b.dataset.doc === doc);
     b.setAttribute("aria-selected", b.dataset.doc === doc);
   });
+  show('[data-doc="cover_letter_template"]', doc === "cover_letter_template");
   if (isLetter(doc)) showLetter(doc);
   $("#previewHint").textContent = DOCS[doc].hint();
   $("#editLabel").textContent = DOCS[doc].edit;
-  $("#downloadLabel").textContent = DOCS[doc].download;
   $("#letterEditTitle").textContent = DOCS[doc].edit;
-  $("#editBtn").setAttribute("aria-controls", editPanel(doc).id);
-  show("#letterTxtBtn", isLetter(doc));
   refreshPreview();
 }
 
 document.querySelectorAll("[data-doc]").forEach((b) => b.addEventListener("click", () => selectDoc(b.dataset.doc)));
 
-// Ouvrir la modification garde une copie, pour pouvoir tout annuler.
+// L'édition garde une copie pour pouvoir tout annuler.
 $("#editBtn").addEventListener("click", () => {
-  const panel = editPanel(state.doc);
-  if (!panel.classList.contains("hidden")) return closeEditPanels();
   state.editSnapshot = isLetter(state.doc) ? readLetter() : readCv();
-  show(panel.id === "cvEditPanel" ? "#cvEditPanel" : "#letterEditPanel");
-  $("#editBtn").setAttribute("aria-expanded", "true");
-  scrollToEl(`#${panel.id}`);
+  setEditing(true);
+  scrollToEl("#previewTitle");
 });
 
-document.querySelectorAll("[data-apply-edit]").forEach((b) => b.addEventListener("click", async () => {
-  closeEditPanels();
-  scrollToEl("#previewTitle");
+$("#doneEditBtn").addEventListener("click", () => {
   if (isLetter(state.doc)) state.letters[state.doc] = readLetter();
-  else recheck();
-  refreshPreview();
-}));
+  setEditing(false);
+  renderSendStatus();
+  scrollToEl("#previewTitle");
+});
 
-document.querySelectorAll("[data-close-edit]").forEach((b) => b.addEventListener("click", () => {
+$("#cancelEditBtn").addEventListener("click", () => {
   if (isLetter(state.doc)) {
     state.letters[state.doc] = state.editSnapshot;
     $("#letterEditor").innerHTML = "";
     showLetter(state.doc);
   } else {
     renderCvEditor(state.editSnapshot);
+    recheck();
   }
-  closeEditPanels();
-  scrollToEl("#previewTitle");
-}));
+  setEditing(false);
+  refreshPreview();
+  renderSendStatus();
+});
 
-$("#downloadBtn").addEventListener("click", () => isLetter(state.doc)
-  ? download("/api/letter/pdf", letterBody())
-  : download("/api/cv/pdf", { cv: readCv() }));
-$("#letterTxtBtn").addEventListener("click", () => download("/api/letter/txt", letterBody()));
+// Aperçu mis à jour pendant la frappe (le rendu prend une fraction de seconde).
+function debounce(fn, ms) {
+  let t;
+  return () => {
+    clearTimeout(t);
+    t = setTimeout(fn, ms);
+  };
+}
+const livePreview = debounce(() => {
+  refreshPreview();
+  renderSendStatus();
+}, 450);
+const liveRecheck = debounce(recheck, 1200);
+$("#cvEditor").addEventListener("input", () => { livePreview(); liveRecheck(); });
+$("#cvEditor").addEventListener("click", (ev) => { if (ev.target.matches(".remove, [data-add]")) { livePreview(); liveRecheck(); } });
+$("#letterEditor").addEventListener("input", livePreview);
+
+// ---------- 3. Télécharger et envoyer ----------
+function renderSendStatus() {
+  if (!state.checks) return;
+  const pending = state.checks.filter((c) => c.status === "pending").length;
+  const brackets = [...new Set(letterAsText(currentLetter()).match(/\[[^\]]{2,60}\]/g) || [])];
+  const items = [];
+  items.push(pending
+    ? `<li class="warn">${pending} point${pending > 1 ? "s" : ""} à vérifier dans la liste ci-dessus.</li>`
+    : `<li class="ok">Points à vérifier : tout est traité.</li>`);
+  items.push(brackets.length
+    ? `<li class="warn">Ta lettre contient encore ${brackets.map(esc).join(", ")} : remplace-${brackets.length > 1 ? "les" : "le"} avant d'envoyer.</li>`
+    : `<li class="ok">Lettre complète, sans [crochets] à remplir.</li>`);
+  $("#sendStatus").innerHTML = items.join("");
+}
+
+// Texte brut de la lettre, sans en-tête d'adresse : ce qu'on colle dans un formulaire.
+function letterAsText(l) {
+  return [l.greeting, ...l.paragraphs, l.closing, readCv().full_name].filter((s) => s && s.trim()).join("\n\n");
+}
+
+async function copyText(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const area = Object.assign(document.createElement("textarea"), { value: text });
+    document.body.appendChild(area);
+    area.select();
+    document.execCommand("copy");
+    area.remove();
+  }
+  const label = btn.querySelector("span") || btn;
+  const previous = label.textContent;
+  label.textContent = "Copiée ✓";
+  setTimeout(() => (label.textContent = previous), 1800);
+}
+
+$("#bundleBtn").addEventListener("click", () => download("/api/bundle", { cv: readCv(), letter: currentLetter(), company: state.company }));
+$("#cvPdfBtn").addEventListener("click", () => download("/api/cv/pdf", { cv: readCv() }));
+$("#letterPdfBtn").addEventListener("click", () => download("/api/letter/pdf", { letter: currentLetter(), cv: readCv(), company: state.company }));
+$("#copyLetterBtn").addEventListener("click", (ev) => copyText(letterAsText(currentLetter()), ev.currentTarget));
+
+// ---------- Et ensuite ----------
+const currentTemplate = () => (state.letterKey === "cover_letter_template" ? readLetter() : state.letters.cover_letter_template);
+$("#templateViewBtn").addEventListener("click", () => {
+  selectDoc("cover_letter_template");
+  scrollToEl("#previewTitle");
+});
+$("#templatePdfBtn").addEventListener("click", () => download("/api/letter/pdf", { letter: currentTemplate(), cv: readCv(), template: true }));
+$("#templateCopyBtn").addEventListener("click", (ev) => copyText(letterAsText(currentTemplate()), ev.currentTarget));
+
+// Nouvelle offre : on garde le CV, les infos d'alternance et les compétences confirmées.
+$("#anotherOfferBtn").addEventListener("click", () => {
+  ["#jobOffer", "#company", "#offerUrl"].forEach((id) => ($(id).value = ""));
+  $("#urlStatus").textContent = "";
+  state.adapted = null;
+  state.jobOffer = "";
+  state.company = "";
+  show("#adapted", false);
+  show("#results", false);
+  show("#questionsBox", false);
+  $("#refineIntro").textContent = "Donne la nouvelle offre : ton CV sera analysé pour elle, avec tes infos d'alternance déjà remplies.";
+  $("#refine").classList.add("highlight");
+  $("#reanalyzeBtn").classList.replace("secondary", "primary");
+  state.maxStep = 2;
+  setStep(2);
+  scrollToEl("#refine");
+  setTimeout(() => $("#offerUrl").focus({ preventScroll: true }), 500);
+});
 
 // ---------- Lettre de motivation ----------
 function showLetter(key) {
@@ -795,8 +909,8 @@ function showLetter(key) {
   state.letterKey = key;
   const l = state.letters[key];
   $("#letterHint").textContent = key === "cover_letter"
-    ? `Lettre rédigée pour ${state.company || "cette entreprise"}. Relis-la et personnalise-la avant envoi.`
-    : "Modèle à réutiliser : remplace chaque passage entre [crochets] pour chaque nouvelle candidature.";
+    ? `Lettre rédigée pour ${state.company || "cette entreprise"}.`
+    : "Garde les passages entre [crochets] : tu les rempliras pour chaque candidature.";
   $("#letterEditor").innerHTML = `
     ${field("Objet", "subject", l.subject)}
     ${field("Formule d'appel", "greeting", l.greeting)}
@@ -813,7 +927,7 @@ $("#backBtn").addEventListener("click", () => scrollToEl("#results"));
 
 $("#restartBtn").addEventListener("click", () => {
   $("#refineForm").reset();
-  Object.assign(state, { file: null, analysis: null, adapted: null, jobOffer: "", company: "" });
+  Object.assign(state, { file: null, analysis: null, adapted: null, jobOffer: "", company: "", checks: null });
   state.addedKeywords.clear();
   $("#letterEditor").innerHTML = "";
   ["#results", "#refine", "#adapted"].forEach((id) => show(id, false));

@@ -183,75 +183,105 @@
       <header class="section-head">
         <p class="step-label">Étape 3 sur 3</p>
         <h2>Ton CV adapté et ta lettre</h2>
-        <p class="subtitle">Relis, ajuste si besoin, puis télécharge. Tout est modifiable.</p>
+        <p class="subtitle">Relis tes documents, vérifie les points signalés, puis télécharge.</p>
       </header>
 
-      <div class="summary-bar">
-        <div class="compare" id="compare"></div>
-        <div class="summary-actions">
-          <button class="btn secondary" id="toLetterBtn" type="button">Voir la lettre</button>
-          <button class="btn primary" id="cvPdfTopBtn" type="button">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
-            Télécharger le CV (PDF)
-          </button>
-        </div>
+      <div class="readability" id="compare"></div>
+
+      <!-- 1. Vérifier -->
+      <div id="checkStep">
+        <h3 class="substep"><span class="num">1</span>Vérifie ce qui manque</h3>
+        <p class="hint">Ces attentes de l'offre ne figurent pas dans ton parcours, donc rien n'a été ajouté. Ajoute seulement ce que tu maîtrises vraiment.</p>
+        <ul class="checklist" id="checklist"></ul>
+        <p class="checklist-status" id="checklistStatus" role="status" aria-live="polite"></p>
       </div>
 
-      <div class="to-check" id="missingBox"></div>
       <details class="extra">
         <summary id="changesSummary">Ce qui a été modifié</summary>
         <ul class="plain" id="changes"></ul>
       </details>
 
-      <!-- Aperçu d'abord : le PDF exact, en images. La modification s'ouvre à la demande. -->
-      <h3 class="substep" id="previewTitle"><span class="num">1</span>Aperçu de tes documents</h3>
-      <div class="tabs" role="tablist" aria-label="Document affiché">
-        <button class="tab active" role="tab" aria-selected="true" data-doc="cv" type="button">CV</button>
-        <button class="tab" role="tab" aria-selected="false" data-doc="cover_letter" type="button">Lettre de motivation</button>
-        <button class="tab" role="tab" aria-selected="false" data-doc="cover_letter_template" type="button">Modèle de lettre</button>
-      </div>
-      <p class="hint" id="previewHint"></p>
-
-      <div class="preview" id="preview" role="tabpanel" aria-live="polite" aria-busy="false"></div>
-
-      <div class="actions">
-        <button class="btn secondary" id="editBtn" type="button" aria-expanded="false" aria-controls="cvEditPanel">
+      <!-- 2. Relire et ajuster -->
+      <h3 class="substep" id="previewTitle"><span class="num" id="reviewNum">2</span>Relis et ajuste</h3>
+      <div class="doc-bar">
+        <div class="tabs" role="tablist" aria-label="Document affiché">
+          <button class="tab active" role="tab" aria-selected="true" data-doc="cv" type="button">CV</button>
+          <button class="tab" role="tab" aria-selected="false" data-doc="cover_letter" type="button">Lettre de motivation</button>
+          <button class="tab hidden" role="tab" aria-selected="false" data-doc="cover_letter_template" type="button">Modèle de lettre</button>
+        </div>
+        <button class="btn secondary" id="editBtn" type="button" aria-expanded="false">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
           <span id="editLabel">Modifier le CV</span>
         </button>
-        <div class="actions-group">
-          <button class="btn link hidden" id="letterTxtBtn" type="button">Version texte (.txt)</button>
-          <button class="btn primary big" id="downloadBtn" type="button">
+      </div>
+      <p class="hint" id="previewHint"></p>
+
+      <div class="workspace" id="workspace">
+        <div class="editor-col">
+          <div class="edit-panel hidden" id="cvEditPanel">
+            <p class="edit-title">Modifier le CV <span>l'aperçu se met à jour pendant que tu tapes</span></p>
+            <div id="cvEditor"></div>
+          </div>
+          <div class="edit-panel hidden" id="letterEditPanel">
+            <p class="edit-title"><span id="letterEditTitle">Modifier la lettre</span> <span>l'aperçu se met à jour pendant que tu tapes</span></p>
+            <p class="hint" id="letterHint"></p>
+            <div id="letterEditor"></div>
+          </div>
+          <div class="actions edit-actions">
+            <button class="btn link" type="button" id="cancelEditBtn">Annuler les modifications</button>
+            <button class="btn primary" type="button" id="doneEditBtn">Terminer</button>
+          </div>
+        </div>
+        <div class="preview-col">
+          <div class="preview" id="preview" role="tabpanel" aria-live="polite" aria-busy="false"></div>
+        </div>
+      </div>
+
+      <!-- 3. Télécharger et envoyer -->
+      <h3 class="substep"><span class="num" id="sendNum">3</span>Télécharge et envoie</h3>
+      <div class="send-box">
+        <ul class="send-status" id="sendStatus"></ul>
+        <div class="send-actions">
+          <button class="btn primary big" id="bundleBtn" type="button">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
-            <span id="downloadLabel">Télécharger le CV (PDF)</span>
+            Tout télécharger (CV + lettre)
           </button>
+          <div class="send-secondary">
+            <button class="btn secondary" id="cvPdfBtn" type="button">CV seul (PDF)</button>
+            <button class="btn secondary" id="letterPdfBtn" type="button">Lettre seule (PDF)</button>
+            <button class="btn secondary" id="copyLetterBtn" type="button">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>
+              <span>Copier la lettre</span>
+            </button>
+          </div>
+          <p class="help">« Copier la lettre » sert aux formulaires qui demandent de coller la lettre dans un champ texte.</p>
         </div>
       </div>
 
-      <!-- Modification, repliée tant qu'on n'en a pas besoin -->
-      <div class="edit-panel hidden" id="cvEditPanel">
-        <h3 class="substep"><span class="num">2</span>Modifier le CV</h3>
-        <p class="hint">Vérifie chaque ligne : tu dois pouvoir défendre tout ce qui est écrit en entretien.</p>
-        <div id="cvEditor"></div>
-        <div class="actions">
-          <button class="btn link" type="button" data-close-edit>Annuler les modifications</button>
-          <button class="btn primary" type="button" data-apply-edit>Mettre à jour l'aperçu</button>
-        </div>
-      </div>
-
-      <div class="edit-panel hidden" id="letterEditPanel">
-        <h3 class="substep" id="letterTitle"><span class="num">2</span><span id="letterEditTitle">Modifier la lettre</span></h3>
-        <p class="hint" id="letterHint"></p>
-        <div id="letterEditor"></div>
-        <div class="actions">
-          <button class="btn link" type="button" data-close-edit>Annuler les modifications</button>
-          <button class="btn primary" type="button" data-apply-edit>Mettre à jour l'aperçu</button>
+      <!-- Et ensuite -->
+      <div class="next-steps">
+        <h3>Et ensuite ?</h3>
+        <div class="next-grid">
+          <div class="next-card">
+            <p class="next-card-title">Postuler à une autre offre</p>
+            <p class="next-card-text">Ton CV et tes infos d'alternance sont gardés : il suffit de donner la nouvelle offre.</p>
+            <button class="btn primary" id="anotherOfferBtn" type="button">Postuler à une autre offre</button>
+          </div>
+          <div class="next-card">
+            <p class="next-card-title">Modèle de lettre réutilisable</p>
+            <p class="next-card-text">Ta lettre avec des [crochets] à remplir pour tes prochaines candidatures.</p>
+            <div class="next-card-actions">
+              <button class="btn secondary" id="templateViewBtn" type="button">Voir et modifier</button>
+              <button class="btn link" id="templatePdfBtn" type="button">Télécharger (PDF)</button>
+              <button class="btn link" id="templateCopyBtn" type="button">Copier</button>
+            </div>
+          </div>
         </div>
       </div>
 
       <div class="actions">
         <button class="btn link" id="backBtn" type="button">↑ Retour à l'analyse</button>
-        <button class="btn link" id="restartBtn" type="button">Nouvelle candidature</button>
+        <button class="btn link" id="restartBtn" type="button">Changer de CV et tout recommencer</button>
       </div>
     </section>
 
