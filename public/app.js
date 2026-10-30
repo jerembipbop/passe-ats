@@ -360,7 +360,7 @@ function renderAnalysis(a) {
 
   // Corrections : triées par impact, doublons retirés.
   const seen = new Set();
-  const fixes = a.ai.priority_fixes
+  const fixes = (a.ai.priority_fixes || [])
     .map((f, i) => ({ ...f, i }))
     .filter((f) => f.action.trim() && !seen.has(normKey(f.action)) && seen.add(normKey(f.action)))
     .sort((x, y) => IMPACT_ORDER[x.impact] - IMPACT_ORDER[y.impact] || x.i - y.i);
@@ -656,8 +656,10 @@ function renderAdapted() {
        <ul>${a.missing_not_added.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>`
     : "";
   state.letters = { cover_letter: a.cover_letter, cover_letter_template: a.cover_letter_template };
+  state.letterKey = null;
   $("#letterEditor").innerHTML = "";
   showLetter("cover_letter");
+  selectDoc("cv");
 }
 
 async function recheck() {
@@ -678,17 +680,120 @@ async function recheck() {
   }
 }
 
-$("#recheckBtn").addEventListener("click", recheck);
-$("#cvPdfBtn").addEventListener("click", () => download("/api/cv/pdf", { cv: readCv() }));
 $("#cvPdfTopBtn").addEventListener("click", () => download("/api/cv/pdf", { cv: readCv() }));
-$("#toLetterBtn").addEventListener("click", () => scrollToEl("#letterTitle"));
+$("#toLetterBtn").addEventListener("click", () => {
+  selectDoc("cover_letter");
+  scrollToEl("#previewTitle");
+});
+
+// ---------- Aperçu des documents, puis modification à la demande ----------
+const DOCS = {
+  cv: {
+    name: "du CV",
+    edit: "Modifier le CV",
+    download: "Télécharger le CV (PDF)",
+    hint: () => "Ton CV tel qu'il sera téléchargé : une colonne et des titres standards, ce que les ATS lisent le mieux.",
+  },
+  cover_letter: {
+    name: "de la lettre",
+    edit: "Modifier la lettre",
+    download: "Télécharger la lettre (PDF)",
+    hint: () => `Lettre rédigée pour ${state.company || "cette offre"}. Relis-la et personnalise-la avant de l'envoyer.`,
+  },
+  cover_letter_template: {
+    name: "du modèle de lettre",
+    edit: "Modifier le modèle",
+    download: "Télécharger le modèle (PDF)",
+    hint: () => "À réutiliser pour tes autres candidatures : remplace chaque passage entre [crochets].",
+  },
+};
+const isLetter = (doc) => doc !== "cv";
+const editPanel = (doc) => $(isLetter(doc) ? "#letterEditPanel" : "#cvEditPanel");
+
+const letterBody = () => ({ letter: readLetter(), cv: readCv(), company: state.company, template: state.letterKey === "cover_letter_template" });
+
+async function refreshPreview() {
+  const el = $("#preview");
+  const doc = state.doc;
+  el.setAttribute("aria-busy", "true");
+  try {
+    const body = isLetter(doc) ? { type: "letter", ...letterBody() } : { type: "cv", cv: readCv() };
+    const { pages } = await api("/api/preview", body);
+    if (doc !== state.doc) return; // l'utilisateur a changé d'onglet entre-temps
+    el.innerHTML = pages.map((p, i) => `
+      <img src="${p.src}" width="${p.width}" height="${p.height}" alt="Aperçu ${DOCS[doc].name}, page ${i + 1} sur ${pages.length}" />
+      ${pages.length > 1 ? `<p class="page-label">Page ${i + 1} sur ${pages.length}</p>` : ""}`).join("");
+  } catch (e) {
+    el.innerHTML = `<p class="preview-empty">L'aperçu n'a pas pu être généré : ${esc(e.message)}</p>`;
+  } finally {
+    el.setAttribute("aria-busy", "false");
+  }
+}
+
+function closeEditPanels() {
+  ["#cvEditPanel", "#letterEditPanel"].forEach((id) => show(id, false));
+  $("#editBtn").setAttribute("aria-expanded", "false");
+}
+
+function selectDoc(doc) {
+  closeEditPanels();
+  state.doc = doc;
+  document.querySelectorAll("[data-doc]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.doc === doc);
+    b.setAttribute("aria-selected", b.dataset.doc === doc);
+  });
+  if (isLetter(doc)) showLetter(doc);
+  $("#previewHint").textContent = DOCS[doc].hint();
+  $("#editLabel").textContent = DOCS[doc].edit;
+  $("#downloadLabel").textContent = DOCS[doc].download;
+  $("#letterEditTitle").textContent = DOCS[doc].edit;
+  $("#editBtn").setAttribute("aria-controls", editPanel(doc).id);
+  show("#letterTxtBtn", isLetter(doc));
+  refreshPreview();
+}
+
+document.querySelectorAll("[data-doc]").forEach((b) => b.addEventListener("click", () => selectDoc(b.dataset.doc)));
+
+// Ouvrir la modification garde une copie, pour pouvoir tout annuler.
+$("#editBtn").addEventListener("click", () => {
+  const panel = editPanel(state.doc);
+  if (!panel.classList.contains("hidden")) return closeEditPanels();
+  state.editSnapshot = isLetter(state.doc) ? readLetter() : readCv();
+  show(panel.id === "cvEditPanel" ? "#cvEditPanel" : "#letterEditPanel");
+  $("#editBtn").setAttribute("aria-expanded", "true");
+  scrollToEl(`#${panel.id}`);
+});
+
+document.querySelectorAll("[data-apply-edit]").forEach((b) => b.addEventListener("click", async () => {
+  closeEditPanels();
+  scrollToEl("#previewTitle");
+  if (isLetter(state.doc)) state.letters[state.doc] = readLetter();
+  else recheck();
+  refreshPreview();
+}));
+
+document.querySelectorAll("[data-close-edit]").forEach((b) => b.addEventListener("click", () => {
+  if (isLetter(state.doc)) {
+    state.letters[state.doc] = state.editSnapshot;
+    $("#letterEditor").innerHTML = "";
+    showLetter(state.doc);
+  } else {
+    renderCvEditor(state.editSnapshot);
+  }
+  closeEditPanels();
+  scrollToEl("#previewTitle");
+}));
+
+$("#downloadBtn").addEventListener("click", () => isLetter(state.doc)
+  ? download("/api/letter/pdf", letterBody())
+  : download("/api/cv/pdf", { cv: readCv() }));
+$("#letterTxtBtn").addEventListener("click", () => download("/api/letter/txt", letterBody()));
 
 // ---------- Lettre de motivation ----------
 function showLetter(key) {
   if (state.letterKey && $("#letterEditor").innerHTML) state.letters[state.letterKey] = readLetter();
   state.letterKey = key;
   const l = state.letters[key];
-  document.querySelectorAll("[data-letter]").forEach((b) => b.classList.toggle("active", b.dataset.letter === key));
   $("#letterHint").textContent = key === "cover_letter"
     ? `Lettre rédigée pour ${state.company || "cette entreprise"}. Relis-la et personnalise-la avant envoi.`
     : "Modèle à réutiliser : remplace chaque passage entre [crochets] pour chaque nouvelle candidature.";
@@ -703,12 +808,6 @@ function readLetter() {
   const g = (k) => $(`#letterEditor [data-k="${k}"]`).value.trim();
   return { subject: g("subject"), greeting: g("greeting"), paragraphs: g("paragraphs").split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean), closing: g("closing") };
 }
-
-document.querySelectorAll("[data-letter]").forEach((b) => b.addEventListener("click", () => showLetter(b.dataset.letter)));
-
-const letterBody = () => ({ letter: readLetter(), cv: readCv(), company: state.company, template: state.letterKey === "cover_letter_template" });
-$("#letterPdfBtn").addEventListener("click", () => download("/api/letter/pdf", letterBody()));
-$("#letterTxtBtn").addEventListener("click", () => download("/api/letter/txt", letterBody()));
 
 $("#backBtn").addEventListener("click", () => scrollToEl("#results"));
 

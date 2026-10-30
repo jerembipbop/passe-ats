@@ -4,7 +4,7 @@ import multer from "multer";
 import { extractCv } from "./lib/extract.js";
 import { runFormatChecks, keywordCoverage, combinedScore, verdictFor } from "./lib/atsChecks.js";
 import { analyzeCv, adaptCv } from "./lib/ai.js";
-import { renderCvPdf, renderLetterPdf, letterToText } from "./lib/pdf.js";
+import { renderCvPdf, renderLetterPdf, letterToText, renderPreview } from "./lib/pdf.js";
 import { importOffer } from "./lib/jobOffer.js";
 
 const app = express();
@@ -91,6 +91,15 @@ app.post("/api/letter/pdf", async (req, res) => {
   const pdf = await renderLetterPdf(letter, cv, template ? "[Entreprise]" : company);
   const name = template ? "Modele_lettre_alternance" : `Lettre_${safeName(company)}`;
   res.type("application/pdf").attachment(`${name}.pdf`).send(pdf);
+});
+
+// Aperçu du CV ou d'une lettre : le PDF exact qui sera téléchargé, en images.
+app.post("/api/preview", async (req, res) => {
+  const { type, cv, letter, company, template } = req.body;
+  const pdf = type === "cv"
+    ? await renderCvPdf(cv)
+    : await renderLetterPdf(letter, cv, template ? "[Entreprise]" : company);
+  res.json({ pages: await renderPreview(pdf) });
 });
 
 app.post("/api/letter/txt", (req, res) => {

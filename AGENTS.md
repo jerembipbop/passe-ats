@@ -49,6 +49,7 @@ Routes (toutes en `POST`) :
 - `/api/cv/pdf`
 - `/api/letter/pdf`
 - `/api/letter/txt`
+- `/api/preview` : aperçu du CV ou d'une lettre, pages du PDF rendues en images
 
 ## Règles sur l'IA
 

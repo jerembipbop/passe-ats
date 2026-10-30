@@ -203,31 +203,50 @@
         <ul class="plain" id="changes"></ul>
       </details>
 
-      <h3 class="substep"><span class="num">1</span>Relis ton CV</h3>
-      <p class="hint">Vérifie chaque ligne : tu dois pouvoir défendre tout ce qui est écrit en entretien.</p>
-      <div id="cvEditor"></div>
+      <!-- Aperçu d'abord : le PDF exact, en images. La modification s'ouvre à la demande. -->
+      <h3 class="substep" id="previewTitle"><span class="num">1</span>Aperçu de tes documents</h3>
+      <div class="tabs" role="tablist" aria-label="Document affiché">
+        <button class="tab active" role="tab" aria-selected="true" data-doc="cv" type="button">CV</button>
+        <button class="tab" role="tab" aria-selected="false" data-doc="cover_letter" type="button">Lettre de motivation</button>
+        <button class="tab" role="tab" aria-selected="false" data-doc="cover_letter_template" type="button">Modèle de lettre</button>
+      </div>
+      <p class="hint" id="previewHint"></p>
+
+      <div class="preview" id="preview" role="tabpanel" aria-live="polite" aria-busy="false"></div>
 
       <div class="actions">
-        <button class="btn secondary" id="recheckBtn" type="button">Revérifier le score</button>
-        <button class="btn primary big" id="cvPdfBtn" type="button">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
-          Télécharger le CV (PDF)
+        <button class="btn secondary" id="editBtn" type="button" aria-expanded="false" aria-controls="cvEditPanel">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+          <span id="editLabel">Modifier le CV</span>
         </button>
+        <div class="actions-group">
+          <button class="btn link hidden" id="letterTxtBtn" type="button">Version texte (.txt)</button>
+          <button class="btn primary big" id="downloadBtn" type="button">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+            <span id="downloadLabel">Télécharger le CV (PDF)</span>
+          </button>
+        </div>
       </div>
 
-      <h3 class="substep" id="letterTitle"><span class="num">2</span>Ta lettre de motivation</h3>
-      <div class="tabs" role="tablist">
-        <button class="tab active" role="tab" data-letter="cover_letter" type="button">Adaptée à cette candidature</button>
-        <button class="tab" role="tab" data-letter="cover_letter_template" type="button">Modèle réutilisable</button>
+      <!-- Modification, repliée tant qu'on n'en a pas besoin -->
+      <div class="edit-panel hidden" id="cvEditPanel">
+        <h3 class="substep"><span class="num">2</span>Modifier le CV</h3>
+        <p class="hint">Vérifie chaque ligne : tu dois pouvoir défendre tout ce qui est écrit en entretien.</p>
+        <div id="cvEditor"></div>
+        <div class="actions">
+          <button class="btn link" type="button" data-close-edit>Annuler les modifications</button>
+          <button class="btn primary" type="button" data-apply-edit>Mettre à jour l'aperçu</button>
+        </div>
       </div>
-      <p class="hint" id="letterHint"></p>
-      <div id="letterEditor"></div>
-      <div class="actions">
-        <button class="btn secondary" id="letterTxtBtn" type="button">Télécharger en texte (.txt)</button>
-        <button class="btn primary big" id="letterPdfBtn" type="button">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
-          Télécharger la lettre (PDF)
-        </button>
+
+      <div class="edit-panel hidden" id="letterEditPanel">
+        <h3 class="substep" id="letterTitle"><span class="num">2</span><span id="letterEditTitle">Modifier la lettre</span></h3>
+        <p class="hint" id="letterHint"></p>
+        <div id="letterEditor"></div>
+        <div class="actions">
+          <button class="btn link" type="button" data-close-edit>Annuler les modifications</button>
+          <button class="btn primary" type="button" data-apply-edit>Mettre à jour l'aperçu</button>
+        </div>
       </div>
 
       <div class="actions">
