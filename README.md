@@ -24,6 +24,15 @@ npm start
 
 4. Ouvre http://localhost:3000
 
+## Mettre le site en ligne (Vercel, gratuit)
+
+1. Crée un compte sur https://vercel.com avec « Continue with GitHub ».
+2. Clique sur **Add New… → Project**, puis importe le dépôt `passe-ats`.
+3. Dans **Environment Variables**, ajoute `OPENROUTER_API_KEY` avec ta clé OpenRouter.
+4. Clique sur **Deploy**. Chaque push sur `main` mettra ensuite le site à jour.
+
+Sur le site public, chaque visiteur est limité à 12 appels à l'IA par jour (variable `AI_LIMIT_PER_DAY`), car le quota gratuit d'OpenRouter est partagé entre tous les visiteurs. Les fichiers sont limités à 4 Mo.
+
 ## Comment le score est calculé
 
 | Partie | Poids | Ce qui est mesuré |

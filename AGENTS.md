@@ -120,8 +120,16 @@ for f in server.js lib/*.js public/app.js; do node --check "$f"; done
 
 - **Ne commite jamais `.env`.** Il est dans `.gitignore`. Ne copie jamais une clé dans le code, les logs, un README ou un message de commit.
 - `lib/jobOffer.js` bloque les adresses internes (localhost, plages privées) et vérifie chaque redirection. Garde cette protection si tu modifies l'import.
-- Les fichiers envoyés restent en mémoire (`multer.memoryStorage`, 10 Mo maximum) et ne sont jamais écrits sur disque.
+- Les fichiers envoyés restent en mémoire (`multer.memoryStorage`, 4 Mo maximum, limite de Vercel) et ne sont jamais écrits sur disque.
+- Sur le site public, `lib/rateLimit.js` limite les appels à l'IA par visiteur et par jour (`AI_LIMIT_PER_DAY`, 12 par défaut sur Vercel, désactivé en local) : le quota gratuit est partagé par tous les visiteurs.
 - **Données sensibles** : le contenu des CV ne doit jamais apparaître dans les logs du serveur.
+
+## Déploiement (Vercel)
+
+- Le site est déployé sur Vercel à chaque push sur `main`. `server.js` exporte l'application (`export default app`) et n'écoute un port qu'en local (`process.env.VERCEL` absent).
+- `express.static()` est ignoré par Vercel : les fichiers de `public/` sont servis directement par son CDN.
+- Variables à définir dans le projet Vercel : `OPENROUTER_API_KEY` (obligatoire), `AI_LIMIT_PER_DAY` (optionnelle).
+- Une requête ne peut pas dépasser 4,5 Mo ni durer plus de 300 s : garde les envois de fichiers sous 4 Mo.
 
 ## Commits et pull requests
 

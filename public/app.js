@@ -328,7 +328,7 @@ const fileInput = $("#cvFile");
 function handleFile(file) {
   if (!file) return;
   if (!/\.(pdf|docx)$/i.test(file.name)) return toast("Format non supporté : dépose un fichier .pdf ou .docx.");
-  if (file.size > 10 * 1024 * 1024) return toast("Fichier trop lourd (10 Mo maximum).");
+  if (file.size > 4 * 1024 * 1024) return toast("Fichier trop lourd (4 Mo maximum). Exporte ton CV en PDF plus léger.");
   state.file = file;
   state.adapted = null;
   state.addedKeywords.clear();

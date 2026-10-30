@@ -8,9 +8,19 @@ import { analyzeKeywords, analyzeDiagnosis, adaptCv } from "./lib/ai.js";
 import { MemoryCache, fingerprint } from "./lib/cache.js";
 import { renderCvPdf, renderLetterPdf, letterToText, renderPreview } from "./lib/pdf.js";
 import { importOffer } from "./lib/jobOffer.js";
+import { aiRateLimit } from "./lib/rateLimit.js";
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
+// 4 Mo : c'est la taille maximale d'une requête acceptée par Vercel.
+const MAX_FILE_MB = 4;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_FILE_MB * 1024 * 1024 } });
+// Derrière le proxy de Vercel, l'adresse du visiteur est dans X-Forwarded-For.
+app.set("trust proxy", true);
+
+// Sur le site public, nombre d'appels à l'IA par visiteur et par jour (désactivé en local).
+const dailyLimit = Number(process.env.AI_LIMIT_PER_DAY || (process.env.VERCEL ? 12 : 0));
+const limitAi = aiRateLimit({ max: dailyLimit });
+const limitPrefetch = aiRateLimit({ max: dailyLimit, silent: true });
 app.use(express.json({ limit: "5mb" }));
 app.use(express.static("public"));
 
@@ -56,7 +66,7 @@ const keywordsFor = ({ cvText, jobOffer, company, onAttempt }) =>
 
 // Réponse progressive (une ligne JSON par étape) : les résultats calculés localement
 // s'affichent en moins d'une seconde, puis les mots-clés, puis le diagnostic de l'IA.
-app.post("/api/analyze", upload.single("cv"), async (req, res) => {
+app.post("/api/analyze", limitAi, upload.single("cv"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Ajoute ton CV (PDF ou Word)." });
   const jobOffer = (req.body.jobOffer || "").trim();
   const company = (req.body.company || "").trim();
@@ -117,20 +127,20 @@ app.post("/api/analyze", upload.single("cv"), async (req, res) => {
 });
 
 // Préparation anticipée : dès qu'une offre est connue, ses mots-clés sont calculés en arrière-plan.
-app.post("/api/offer/keywords", (req, res) => {
+app.post("/api/offer/keywords", limitPrefetch, (req, res) => {
   const jobOffer = (req.body.jobOffer || "").trim();
   if (jobOffer.length >= 50) keywordsFor({ jobOffer, company: (req.body.company || "").trim() }).catch(() => {});
   res.json({ ok: true });
 });
 
-app.post("/api/offer/import", async (req, res) => {
+app.post("/api/offer/import", limitAi, async (req, res) => {
   if (!req.body.url?.trim()) return res.status(400).json({ error: "Colle le lien de l'annonce." });
   res.json(await importOffer(req.body.url));
 });
 
 // Le navigateur lance l'adaptation en avance dès l'analyse terminée ; le clic sur
 // « Adapter » récupère alors la même demande, déjà en cours ou terminée.
-app.post("/api/adapt", async (req, res) => {
+app.post("/api/adapt", limitAi, async (req, res) => {
   const { cvText, jobOffer, company, analysis, profile } = req.body;
   const key = fingerprint(cvText, jobOffer, company, profile, analysis?.priority_fixes, analysis?.keywords?.map((k) => [k.keyword, k.present]));
   res.json(await cached(adaptCache, key, () => adaptCv({ cvText, jobOffer, company, analysis, profile })));
@@ -183,12 +193,21 @@ app.post("/api/letter/txt", (req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error(err);
+  if (err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({ error: `Fichier trop lourd : ${MAX_FILE_MB} Mo maximum. Exporte ton CV en PDF plus léger (sans images en haute définition).` });
+  }
+  // Seules les vraies pannes sont journalisées (jamais le contenu d'un CV).
+  if (!err.status || err.status >= 500) console.error(err);
   res.status(err.status || 500).json({ error: err.message || "Erreur inattendue." });
 });
 
-const port = process.env.PORT || 3000;
-app.listen(port, () => {
-  console.log(`Plateforme ATS alternance : http://localhost:${port}`);
-  if (!process.env.OPENROUTER_API_KEY) console.warn("⚠ OPENROUTER_API_KEY manquante : ajoute-la dans le fichier .env");
-});
+// Sur Vercel, l'application est exportée et exécutée comme une fonction ; en local, elle écoute un port.
+if (!process.env.VERCEL) {
+  const port = process.env.PORT || 3000;
+  app.listen(port, () => {
+    console.log(`Plateforme ATS alternance : http://localhost:${port}`);
+    if (!process.env.OPENROUTER_API_KEY) console.warn("⚠ OPENROUTER_API_KEY manquante : ajoute-la dans le fichier .env");
+  });
+}
+
+export default app;
