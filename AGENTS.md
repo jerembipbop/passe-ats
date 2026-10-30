@@ -70,6 +70,8 @@ Routes (toutes en `POST`) :
 Le score est calculé dans `lib/atsChecks.js` et `server.js` : 40 % note de l'IA, 30 % lisibilité, 30 % mots-clés. Le verdict est « passe » à partir de 75, « limite » à partir de 55.
 
 - La couverture des mots-clés est **calculée localement** sur le texte extrait, à partir de la liste de l'IA (`keyword` et `variants`). Le champ `present` ne vient jamais de l'IA.
+- Si au moins un ATS est jugé bloquant (`ko`), la note est plafonnée à 74 et le verdict ne peut pas être « passe » (`capForBlockingAts`).
+- Les tests techniques en échec deviennent les premières corrections (`technicalFixes`) ; `withoutTestDuplicates` retire les corrections de l'IA qui portent sur le même sujet. Les titres de section ne comptent que sur une ligne courte, et les titres en lettres espacées ou les lettrines sont détectés.
 - `/api/cv/check` régénère le PDF, le relit et note uniquement la partie mesurable (lisibilité et mots-clés), sans IA.
 
 ## Style de code

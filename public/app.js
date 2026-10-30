@@ -580,6 +580,8 @@ function renderAnalysis(a) {
     ? `Comparé à l'offre${company ? ` · ${company}` : ""}`
     : `Analyse générale${a.ai.detected_job_title ? ` · ${a.ai.detected_job_title}` : ""}`;
   $("#nextStep").textContent = a.ai.next_step || a.ai.summary;
+  // Verdict plafonné côté serveur quand un ATS bloque : on dit lesquels.
+  if (a.cappedBy?.length) $("#context").textContent += ` · bloquant pour ${a.cappedBy.join(", ")}`;
 
   // Tuiles
   const missing = a.keywords.filter((k) => !k.present).length;

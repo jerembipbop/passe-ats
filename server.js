@@ -3,7 +3,7 @@ import express from "express";
 import multer from "multer";
 import JSZip from "jszip";
 import { extractCv } from "./lib/extract.js";
-import { runFormatChecks, keywordCoverage, combinedScore, verdictFor } from "./lib/atsChecks.js";
+import { runFormatChecks, keywordCoverage, combinedScore, verdictFor, capForBlockingAts, technicalFixes, withoutTestDuplicates } from "./lib/atsChecks.js";
 import { analyzeKeywords, analyzeDiagnosis, adaptCv } from "./lib/ai.js";
 import { MemoryCache, fingerprint } from "./lib/cache.js";
 import { renderCvPdf, renderLetterPdf, letterToText, renderPreview } from "./lib/pdf.js";
@@ -94,13 +94,14 @@ app.post("/api/analyze", upload.single("cv"), async (req, res) => {
       const [kw, diagnosis] = await Promise.all([keywordsPromise, diagnosisPromise]);
       const ai = {
         ...diagnosis,
+        priority_fixes: [...technicalFixes(format.checks), ...withoutTestDuplicates(diagnosis.priority_fixes, format.checks)].slice(0, 7),
         detected_job_title: kw.detected_job_title,
         detected_company: kw.detected_company,
         keywords: kw.keywords,
         models: { keywords: kw.model, diagnosis: diagnosis.model },
       };
       return {
-        ...scoreReport(cvText, extracted, kw.keywords, diagnosis.score),
+        ...capForBlockingAts(scoreReport(cvText, extracted, kw.keywords, diagnosis.score), diagnosis.ats_systems),
         ai,
         hasOffer: !!jobOffer,
         cvText,
