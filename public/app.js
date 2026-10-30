@@ -1,8 +1,7 @@
 const $ = (sel) => document.querySelector(sel);
-const state = { file: null, analysis: null, adapted: null, jobOffer: "", company: "", letterKey: "cover_letter" };
+const state = { addedKeywords: new Set(), file: null, analysis: null, adapted: null, jobOffer: "", company: "", letterKey: "cover_letter" };
 
 const VERDICT_LABEL = { passe: "Passe les ATS", limite: "Passage incertain", rejet_probable: "Rejet probable" };
-const ATS_LABEL = { ok: "OK", risque: "Risque", ko: "Bloquant" };
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const lines = (s) => s.split("\n").map((l) => l.trim()).filter(Boolean);
@@ -15,22 +14,172 @@ function scrollToEl(id) {
   const top = $(id).getBoundingClientRect().top + window.scrollY - $(".stepper").offsetHeight - 12;
   window.scrollTo({ top, behavior: "smooth" });
 }
+// Les étapes déjà atteintes restent cliquables pour y revenir.
 function setStep(step) {
+  state.maxStep = step === 1 ? 1 : Math.max(state.maxStep || 1, step);
   document.querySelectorAll(".stepper li").forEach((li) => {
     const n = Number(li.dataset.step);
     li.classList.toggle("active", n === step);
     li.classList.toggle("done", n < step);
     li.toggleAttribute("aria-current", n === step);
+    li.querySelector(".step-btn").disabled = n > state.maxStep || n === step;
   });
 }
+document.querySelectorAll(".step-btn").forEach((btn) => btn.addEventListener("click", () => {
+  const target = btn.dataset.target;
+  if (target === "#hero") window.scrollTo({ top: 0, behavior: "smooth" });
+  else scrollToEl(target);
+}));
 function setLoading(btn, loading) {
   btn.classList.toggle("loading", loading);
   btn.disabled = loading;
 }
 
-function busy(text) {
-  $("#overlayText").textContent = text;
-  $("#overlay").classList.toggle("hidden", !text);
+// ---------- Chargement : progression estimée et astuces ----------
+// L'IA répond en un seul bloc : la progression est une estimation fondée sur la durée
+// des traitements précédents, qui ralentit à l'approche de la fin puis saute à 100 %.
+const LOADS = {
+  analyze: {
+    title: "Analyse de ton CV",
+    expected: 110000,
+    stages: [
+      [0, "Lecture de ton fichier comme le ferait un ATS"],
+      [8, "Vérification de la lisibilité et des sections"],
+      [18, "Repérage des mots-clés attendus"],
+      [32, "Analyse approfondie par l'IA"],
+      [65, "Verdict pour chaque logiciel de recrutement"],
+      [85, "Calcul de ton score final"],
+    ],
+  },
+  adapt: {
+    title: "Création de ton CV et de ta lettre",
+    expected: 130000,
+    stages: [
+      [0, "Préparation de ton profil"],
+      [10, "Réécriture de ton CV pour l'offre"],
+      [35, "Intégration des mots-clés de l'offre"],
+      [55, "Rédaction de ta lettre de motivation"],
+      [75, "Création du modèle de lettre réutilisable"],
+      [88, "Relecture de ton nouveau CV comme un ATS"],
+    ],
+  },
+};
+
+const TIPS = [
+  "La plupart des grandes entreprises trient les candidatures avec un ATS avant qu'un humain ne les lise.",
+  "Un recruteur parcourt souvent un CV en moins de 10 secondes : mets l'essentiel en haut.",
+  "Reprends le titre exact de l'offre dans l'intitulé de ton CV : c'est souvent le premier filtre de l'ATS.",
+  "Les ATS lisent mal les CV en deux colonnes : une seule colonne, c'est le plus sûr.",
+  "Évite les barres de niveau et les étoiles pour tes compétences : un ATS ne sait pas les lire.",
+  "Ne mets jamais ton e-mail ou ton téléphone dans l'en-tête du document : beaucoup d'ATS l'ignorent.",
+  "Utilise des titres de section classiques : « Expérience », « Formation », « Compétences ».",
+  "Commence chaque mission par un verbe d'action : « Géré », « Rédigé », « Analysé »…",
+  "Un chiffre vaut mieux qu'un adjectif : « 12 articles publiés » plutôt que « nombreux articles ».",
+  "Pour une alternance, indique ton rythme (ex. 3 semaines / 1 semaine) dès le titre du CV.",
+  "Précise ta date de début et la durée du contrat : c'est la première question des entreprises.",
+  "Nomme ton fichier « CV_Prénom_Nom_Alternance.pdf » : c'est plus pro et plus facile à retrouver.",
+  "Envoie toujours ton CV en PDF texte, jamais en image ou en scan.",
+  "Une page suffit pour une alternance : les recruteurs préfèrent la clarté à l'exhaustivité.",
+  "Adapte ton CV à chaque offre : c'est ce qui fait le plus monter ton score de mots-clés.",
+  "Les mots-clés doivent apparaître dans tes expériences, pas seulement dans une liste de compétences.",
+  "Relance l'entreprise une semaine après ta candidature : peu de candidats le font, ça se remarque.",
+  "Ta lettre de motivation doit parler de l'entreprise avant de parler de toi.",
+  "L'école peut t'aider : beaucoup de CFA ont des listes d'entreprises qui cherchent des alternants.",
+  "Postule tôt : les offres d'alternance pour septembre sont souvent pourvues dès le printemps.",
+  "Ton profil LinkedIn doit raconter la même histoire que ton CV : les recruteurs vérifient.",
+  "Les fautes d'orthographe font partie des premiers motifs de rejet : fais-toi relire.",
+];
+
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const loader = { timer: null, tipTimer: null };
+
+function expectedDuration(kind) {
+  try {
+    const past = JSON.parse(localStorage.getItem(`duree_${kind}`) || "[]");
+    if (past.length) return past.reduce((a, b) => a + b, 0) / past.length;
+  } catch {}
+  return LOADS[kind].expected;
+}
+function rememberDuration(kind, ms) {
+  try {
+    const past = JSON.parse(localStorage.getItem(`duree_${kind}`) || "[]");
+    localStorage.setItem(`duree_${kind}`, JSON.stringify([...past, ms].slice(-5)));
+  } catch {}
+}
+
+function setProgress(pct) {
+  $("#loaderPct").textContent = pct;
+  $("#loaderBar").setAttribute("aria-valuenow", pct);
+  $("#loaderBar .progress-fill").style.width = `${pct}%`;
+}
+
+const fmtTime = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
+
+// Astuces écrites lettre par lettre, l'une après l'autre, dans un ordre aléatoire.
+function startTips() {
+  const order = [...TIPS.keys()].sort(() => Math.random() - 0.5);
+  let n = 0;
+  const next = () => {
+    const tip = TIPS[order[n % order.length]];
+    $("#tipCount").textContent = `${(n % order.length) + 1}/${TIPS.length}`;
+    n++;
+    const el = $("#tipText");
+    if (reduceMotion) {
+      el.textContent = tip;
+      loader.tipTimer = setTimeout(next, 7000);
+      return;
+    }
+    let i = 0;
+    const type = () => {
+      el.textContent = tip.slice(0, ++i);
+      loader.tipTimer = i < tip.length ? setTimeout(type, 24) : setTimeout(erase, 4500);
+    };
+    const erase = () => {
+      el.textContent = el.textContent.slice(0, -3);
+      loader.tipTimer = el.textContent ? setTimeout(erase, 10) : setTimeout(next, 250);
+    };
+    type();
+  };
+  next();
+}
+
+function startLoader(kind) {
+  const cfg = LOADS[kind];
+  const expected = expectedDuration(kind);
+  const started = Date.now();
+  Object.assign(loader, { kind, started });
+  $("#overlay").classList.remove("hidden", "finished");
+  $("#loaderTitle").textContent = cfg.title;
+  setProgress(0);
+
+  const tick = () => {
+    const elapsed = Date.now() - started;
+    const pct = Math.min(97, Math.floor(97 * (1 - Math.exp((-2.4 * elapsed) / expected))));
+    setProgress(pct);
+    $("#loaderStage").textContent = cfg.stages.filter(([from]) => pct >= from).at(-1)[1];
+    $("#loaderMeta").textContent = elapsed > expected * 1.15
+      ? `${fmtTime(elapsed)} écoulées · les modèles gratuits sont chargés, ça arrive…`
+      : `${fmtTime(elapsed)} écoulées · environ ${fmtTime(Math.max(0, expected - elapsed))} restantes`;
+  };
+  tick();
+  clearInterval(loader.timer);
+  loader.timer = setInterval(tick, 400);
+  clearTimeout(loader.tipTimer);
+  startTips();
+}
+
+// Termine le chargement : en cas de succès, la barre se remplit avant de disparaître.
+async function stopLoader(success) {
+  clearInterval(loader.timer);
+  if (success) {
+    rememberDuration(loader.kind, Date.now() - loader.started);
+    $("#overlay").classList.add("finished");
+    setProgress(100);
+    $("#loaderStage").textContent = "Terminé !";
+    await new Promise((r) => setTimeout(r, 700));
+  }
+  clearTimeout(loader.tipTimer);
+  $("#overlay").classList.add("hidden");
 }
 function toast(msg) {
   const t = $("#toast");
@@ -73,6 +222,7 @@ function handleFile(file) {
   if (file.size > 10 * 1024 * 1024) return toast("Fichier trop lourd (10 Mo maximum).");
   state.file = file;
   state.adapted = null;
+  state.addedKeywords.clear();
   runAnalysis();
 }
 
@@ -120,6 +270,9 @@ $("#changeCvBtn").addEventListener("click", () => fileInput.click());
 function profile() {
   const p = {};
   document.querySelectorAll("[data-profile]").forEach((el) => { if (el.value.trim()) p[el.dataset.profile] = el.value.trim(); });
+  if (state.addedKeywords.size) {
+    p["Compétences maîtrisées, à ajouter au CV (confirmées par le candidat)"] = [...state.addedKeywords].join(", ");
+  }
   return p;
 }
 
@@ -130,95 +283,193 @@ async function runAnalysis() {
   fd.append("company", $("#company").value.trim());
   fd.append("profile", JSON.stringify(profile()));
 
-  busy(fd.get("jobOffer")
-    ? "Comparaison de ton CV avec l'offre… (1 à 2 minutes avec les modèles gratuits)"
-    : "Lecture de ton CV comme un ATS, puis analyse par l'IA… (1 à 2 minutes avec les modèles gratuits)");
+  startLoader("analyze");
+  let analysis;
   try {
-    const analysis = await api("/api/analyze", fd);
-    state.analysis = analysis;
-    state.jobOffer = fd.get("jobOffer");
-    state.company = fd.get("company") || analysis.company || "";
-    $("#fileName").textContent = state.file.name;
-    $("#hero").classList.add("compact");
-    renderAnalysis(analysis);
-    renderRefine(analysis);
-    $("#reanalyzeBtn").classList.replace("primary", "secondary");
-    show("#results");
-    show("#refine");
-    show("#adapted", false);
-    setStep(2);
-    scrollToEl("#results");
-    return true;
+    analysis = await api("/api/analyze", fd);
   } catch (e) {
+    await stopLoader(false);
     toast(e.message);
     return false;
-  } finally {
-    busy(null);
   }
+  await stopLoader(true);
+  state.analysis = analysis;
+  state.jobOffer = fd.get("jobOffer");
+  state.company = fd.get("company") || analysis.company || "";
+  $("#fileName").textContent = state.file.name;
+  $("#hero").classList.add("compact");
+  renderAnalysis(analysis);
+  renderRefine(analysis);
+  $("#reanalyzeBtn").classList.replace("primary", "secondary");
+  show("#results");
+  show("#refine");
+  show("#adapted", false);
+  setStep(2);
+  scrollToEl("#results");
+  return true;
 }
 
 // ---------- Résultat ----------
-function setGauge(el, score) {
-  el.style.setProperty("--v", score);
-  el.style.setProperty("--c", score >= 75 ? "var(--ok)" : score >= 55 ? "var(--warn)" : "var(--ko)");
-}
+const ATS_STATE = { ok: "lu correctement", risque: "risque de mauvaise lecture", ko: "bloquant" };
+const IMPACT_ORDER = { fort: 0, moyen: 1, faible: 2 };
+const IMPORTANCE_ORDER = { essentiel: 0, important: 1, bonus: 2 };
+const normKey = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+// Une tuile n'est mise en alerte que si son score demande une action.
+const needsAction = (score) => score < 75;
 
 function renderAnalysis(a) {
-  setGauge($("#gauge"), a.score);
+  const pass = a.verdict === "passe";
+  const company = state.company;
+
+  $(".ring").classList.toggle("pass", pass);
+  $("#ringValue").setAttribute("stroke-dasharray", `${a.score} 100`);
   $("#scoreValue").textContent = a.score;
-  $("#verdict").className = `verdict v-${a.verdict}`;
+  $("#verdict").className = `badge${pass ? " pass" : ""}`;
   $("#verdict").textContent = VERDICT_LABEL[a.verdict];
+  $("#resultTitle").setAttribute("aria-label", `Score ATS ${a.score} sur 100 : ${VERDICT_LABEL[a.verdict]}`);
   $("#context").textContent = a.hasOffer
-    ? `comparé à l'offre${state.company ? ` · ${state.company}` : ""}`
-    : `analyse générale${a.ai.detected_job_title ? ` · ${a.ai.detected_job_title}` : ""}`;
-  $("#summary").textContent = a.ai.summary;
-  $("#breakdown").innerHTML = `
-    <span>Analyse IA <b>${a.breakdown.ia}</b></span>
-    <span>Lisibilité du fichier <b>${a.breakdown.format}</b></span>
-    <span>Mots-clés trouvés <b>${a.breakdown.motsCles}%</b></span>
-    ${a.ai.model ? `<span>Modèle IA <b>${esc(a.ai.model.replace(/:free$/, ""))}</b></span>` : ""}`;
+    ? `Comparé à l'offre${company ? ` · ${company}` : ""}`
+    : `Analyse générale${a.ai.detected_job_title ? ` · ${a.ai.detected_job_title}` : ""}`;
+  $("#nextStep").textContent = a.ai.next_step || a.ai.summary;
 
-  $("#atsGrid").innerHTML = a.ai.ats_systems.map((s) => `
-    <div class="ats ${s.verdict}"><span class="tag">${ATS_LABEL[s.verdict]}</span><strong>${esc(s.name)}</strong>${esc(s.reason)}</div>`).join("");
+  // Tuiles
+  const failed = a.checks.filter((c) => !c.ok).length;
+  const missing = a.keywords.filter((k) => !k.present).length;
+  const tiles = [
+    { label: "Analyse IA", value: `${a.breakdown.ia}/100`, note: "Avis global sur ton CV", score: a.breakdown.ia },
+    {
+      label: "Lisibilité",
+      value: `${a.breakdown.format}/100`,
+      note: failed ? `${failed} point${failed > 1 ? "s" : ""} technique${failed > 1 ? "s" : ""} à revoir` : "Ton fichier est bien lu",
+      score: a.breakdown.format,
+    },
+    {
+      label: "Mots-clés",
+      value: `${a.breakdown.motsCles} %`,
+      note: missing ? `${missing} sur ${a.keywords.length} manquant${missing > 1 ? "s" : ""}` : "Tous présents",
+      score: a.breakdown.motsCles,
+    },
+  ];
+  $("#tiles").innerHTML = tiles.map((t) => `
+    <div class="tile${needsAction(t.score) ? " alert" : ""}">
+      <p class="tile-label">${t.label}</p>
+      <p class="tile-value">${t.value}</p>
+      <p class="tile-note">${t.note}</p>
+    </div>`).join("");
 
-  $("#keywordsHint").textContent = a.hasOffer
-    ? "Mots-clés de l'offre. En vert : trouvés dans ton CV. En rouge : absents (c'est sur eux que l'ATS te filtre)."
-    : "Mots-clés habituellement attendus pour ce poste. Ajoute l'offre visée ci-dessous pour une vérification précise.";
-  renderKeywords($("#keywords"), a.keywords);
+  // Corrections : triées par impact, doublons retirés.
+  const seen = new Set();
+  const fixes = a.ai.priority_fixes
+    .map((f, i) => ({ ...f, i }))
+    .filter((f) => f.action.trim() && !seen.has(normKey(f.action)) && seen.add(normKey(f.action)))
+    .sort((x, y) => IMPACT_ORDER[x.impact] - IMPACT_ORDER[y.impact] || x.i - y.i);
+  $("#fixes").innerHTML = fixes.length
+    ? fixes.map((f) => `<li>${esc(f.action)}</li>`).join("")
+    : `<li class="empty">Rien d'urgent : ton CV est prêt pour les ATS.</li>`;
 
+  // Mots-clés
+  $("#keywordsHint").textContent = missing
+    ? `Clique sur un mot-clé manquant si tu maîtrises la compétence : il sera ajouté à ton CV adapté.${a.hasOffer ? "" : " Ces mots-clés sont ceux habituellement attendus pour ce poste."}`
+    : "Tous les mots-clés attendus sont présents dans ton CV.";
+  renderKeywords(a.keywords);
+
+  // Détails
+  $("#sections").innerHTML = a.ai.section_feedback.map((s) => `<li><strong>${esc(s.section)}</strong><small>${esc(s.feedback)}</small></li>`).join("")
+    || "<li>Aucun conseil particulier.</li>";
+  $("#atsList").innerHTML = a.ai.ats_systems.map((s) => `
+    <li><strong>${esc(s.name)}</strong> <span class="${s.verdict === "ok" ? "" : "flag"}">· ${ATS_STATE[s.verdict]}</span><small>${esc(s.reason)}</small></li>`).join("");
   $("#checks").innerHTML = a.checks.map((c) => `
-    <li class="${c.ok ? "" : "fail"}">${esc(c.label)}${c.ok ? "" : `<small>${esc(c.detail)}</small>`}</li>`).join("");
-
-  $("#issues").innerHTML = a.ai.parsing_issues.length
-    ? a.ai.parsing_issues.map((i) => `<li><span class="sev ${i.severity}">${i.severity}</span>${esc(i.issue)}<small>→ ${esc(i.fix)}</small></li>`).join("")
-    : "<li>Aucun problème majeur détecté.</li>";
-
-  $("#sections").innerHTML = a.ai.section_feedback.map((s) => `<li><strong>${esc(s.section)}</strong><small>${esc(s.feedback)}</small></li>`).join("");
+    <li>${esc(c.label)} <span class="${c.ok ? "" : "flag"}">· ${c.ok ? "respecté" : "à revoir"}</span>${c.ok ? "" : `<small>${esc(c.detail)}</small>`}</li>`).join("");
   $("#rawText").textContent = a.cvText || "(aucun texte extrait)";
+
+  $("#resultFoot").innerHTML = a.ai.model
+    ? `Analyse réalisée par un <abbr title="${esc(a.ai.model)}">modèle d'IA gratuit</abbr> via OpenRouter.`
+    : "";
 }
 
-function renderKeywords(el, keywords) {
-  const order = { essentiel: 0, important: 1, bonus: 2 };
-  el.innerHTML = [...keywords]
-    .sort((x, y) => (x.present - y.present) || (order[x.importance] - order[y.importance]))
-    .map((k) => `<span class="chip ${k.present ? "yes" : "no"} ${k.importance}" title="${esc(k.importance)}">${esc(k.keyword)} <small>${k.importance === "essentiel" ? "★" : ""}</small></span>`)
-    .join("");
+function renderKeywords(keywords) {
+  const sorted = [...keywords].sort((x, y) => (x.present - y.present) || IMPORTANCE_ORDER[x.importance] - IMPORTANCE_ORDER[y.importance]);
+  const check = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5L20 7"/></svg>`;
+  $("#keywords").innerHTML = sorted.map((k) => {
+    if (k.present) return `<span class="chip found" title="Trouvé dans ton CV">${check}${esc(k.keyword)}</span>`;
+    const added = state.addedKeywords.has(k.keyword);
+    return `<button type="button" class="chip missing${added ? " added" : ""}" data-kw="${esc(k.keyword)}" aria-pressed="${added}"
+      title="${added ? "Retirer de ton CV adapté" : "Je maîtrise cette compétence : l'ajouter à mon CV"}"><span class="plus" aria-hidden="true">${added ? "✓" : "+"}</span>${esc(k.keyword)}</button>`;
+  }).join("");
+}
+
+// Un mot-clé manquant cliqué est confirmé par le candidat : il part dans le CV adapté.
+$("#keywords").addEventListener("click", (ev) => {
+  const chip = ev.target.closest("button.chip.missing");
+  if (!chip) return;
+  const kw = chip.dataset.kw;
+  const added = !state.addedKeywords.has(kw);
+  if (added) state.addedKeywords.add(kw);
+  else state.addedKeywords.delete(kw);
+  renderKeywords(state.analysis.keywords);
+  if (!$("#adapted").classList.contains("hidden")) syncAddedSkill(kw, added);
+});
+
+// Si le CV adapté est déjà affiché, on met aussi à jour son éditeur.
+function syncAddedSkill(kw, added) {
+  const CATEGORY = "Compétences ajoutées";
+  let item = [...document.querySelectorAll('[data-list="skills"] .item')].find((it) => it.querySelector('[data-k="category"]').value === CATEGORY);
+  if (!item && added) {
+    item = document.createElement("div");
+    item.className = "item";
+    item.innerHTML = `${LIST_BLOCKS.skills.render({ category: CATEGORY, items: [] })}<button type="button" class="ghost remove">Retirer</button>`;
+    $('[data-list="skills"] .items').appendChild(item);
+  }
+  if (!item) return;
+  const input = item.querySelector('[data-k="items"]');
+  const items = input.value.split(",").map((s) => s.trim()).filter(Boolean).filter((s) => s !== kw);
+  if (added) items.push(kw);
+  input.value = items.join(", ");
 }
 
 // ---------- Affinage selon le résultat ----------
 function renderRefine(a) {
   let intro;
   if (!a.hasOffer) {
-    intro = "Ce résultat est général. Pour savoir si ton CV passe pour une entreprise précise, colle l'offre visée : l'ATS te filtre d'abord sur ses mots-clés.";
+    intro = "Ajoute l'offre visée : c'est sur ses mots-clés que les ATS te filtrent.";
   } else if (a.verdict !== "passe") {
-    intro = "Ton CV peut encore progresser. Réponds aux points ci-dessous si tu le peux, puis relance l'analyse ou passe directement à l'adaptation.";
+    intro = "Complète ce qui manque, puis relance l'analyse ou passe directement à l'adaptation.";
   } else {
-    intro = "Ton CV passe pour cette offre. Tu peux l'adapter tout de suite, ou compléter les infos pour une lettre plus personnalisée.";
+    intro = "Ton CV passe pour cette offre. Ajoute tes infos d'alternance pour une lettre plus personnelle.";
   }
   $("#refineIntro").textContent = intro;
-  $("#suggestions").innerHTML = (a.ai.refine_suggestions || []).map((s) => `<li>${esc(s)}</li>`).join("");
+  const questions = a.ai.refine_suggestions || [];
+  $("#suggestions").innerHTML = questions.map((s) => `<li>${esc(s)}</li>`).join("");
+  show("#questionsBox", questions.length > 0);
   $("#refine").classList.toggle("highlight", !a.hasOffer || a.verdict !== "passe");
   if (a.verdict !== "passe") $("#profileBox").open = true;
+  renderNextAction(a);
+}
+
+// Bloc « Prochaine étape » en bas du résultat : une action principale selon la situation.
+function renderNextAction(a) {
+  const toRefine = (focus) => () => {
+    scrollToEl("#refine");
+    setTimeout(() => focus?.focus({ preventScroll: true }), 500);
+  };
+  const adapt = () => $("#adaptBtn").click();
+  const config = a.hasOffer
+    ? {
+        text: "Adapte ton CV à cette offre et récupère ta lettre de motivation.",
+        primary: ["Adapter mon CV et créer ma lettre", adapt],
+        secondary: ["Ajouter des infos d'abord", () => { $("#profileBox").open = true; toRefine($("#profileBox summary"))(); }],
+      }
+    : {
+        text: "Ajoute l'offre visée pour vérifier les mots-clés qui comptent vraiment.",
+        primary: ["Ajouter l'offre visée", toRefine($("#offerUrl"))],
+        secondary: ["Adapter sans offre", adapt],
+      };
+  $("#nextActionText").textContent = config.text;
+  $("#nextPrimary").textContent = config.primary[0];
+  $("#nextPrimary").onclick = config.primary[1];
+  $("#nextSecondary").textContent = config.secondary[0];
+  $("#nextSecondary").onclick = config.secondary[1];
 }
 
 $("#refineForm").addEventListener("submit", (ev) => {
@@ -279,7 +530,7 @@ urlInput.addEventListener("paste", () => setTimeout(() => {
 $("#adaptBtn").addEventListener("click", async () => {
   // L'offre a changé depuis la dernière analyse : on réanalyse d'abord pour avoir les bons mots-clés.
   if ($("#jobOffer").value.trim() !== state.jobOffer && !(await runAnalysis())) return;
-  busy("Réécriture de ton CV et rédaction de ta lettre de motivation… (2 à 3 minutes avec les modèles gratuits)");
+  startLoader("adapt");
   try {
     state.adapted = await api("/api/adapt", {
       cvText: state.analysis.cvText,
@@ -288,16 +539,17 @@ $("#adaptBtn").addEventListener("click", async () => {
       analysis: { ...state.analysis.ai, keywords: state.analysis.keywords },
       profile: profile(),
     });
-    renderAdapted();
-    show("#adapted");
-    setStep(3);
-    scrollToEl("#adapted");
-    await recheck();
   } catch (e) {
+    await stopLoader(false);
     toast(e.message);
-  } finally {
-    busy(null);
+    return;
   }
+  await stopLoader(true);
+  renderAdapted();
+  show("#adapted");
+  setStep(3);
+  scrollToEl("#adapted");
+  await recheck();
 });
 
 // ---------- Étape 3 : éditeur de CV ----------
@@ -397,8 +649,11 @@ function renderAdapted() {
   const a = state.adapted;
   renderCvEditor(a.cv);
   $("#changes").innerHTML = a.changes.map((c) => `<li>${esc(c)}</li>`).join("");
+  $("#changesSummary").textContent = `Ce qui a été modifié (${a.changes.length})`;
   $("#missingBox").innerHTML = a.missing_not_added.length
-    ? `<strong>Mots-clés non ajoutés car absents de ton parcours :</strong> ${a.missing_not_added.map(esc).join(", ")}.<br>Si tu les maîtrises vraiment, ajoute-les toi-même dans l'éditeur ci-dessous : ils feront monter ton score.`
+    ? `<h3>À vérifier avant d'envoyer</h3>
+       <p>Ces attentes de l'offre ne figurent pas dans ton parcours, donc rien n'a été ajouté. Ajoute-les dans l'éditeur seulement si tu les maîtrises.</p>
+       <ul>${a.missing_not_added.map((m) => `<li>${esc(m)}</li>`).join("")}</ul>`
     : "";
   state.letters = { cover_letter: a.cover_letter, cover_letter_template: a.cover_letter_template };
   $("#letterEditor").innerHTML = "";
@@ -410,12 +665,14 @@ async function recheck() {
     const r = await api("/api/cv/check", { cv: readCv(), keywords: state.analysis.ai.keywords });
     const b = state.analysis.breakdown;
     const before = Math.round((b.format + b.motsCles) / 2);
-    const color = (s) => (s >= 75 ? "v-passe" : s >= 55 ? "v-limite" : "v-rejet_probable");
     $("#compare").innerHTML = `
-      <span>Score technique avant : <span class="pill ${color(before)}">${before}/100</span></span>
-      <span>→ après : <span class="pill ${color(r.score)}">${r.score}/100</span></span>
-      <span class="verdict v-${r.verdict}">${VERDICT_LABEL[r.verdict]}</span>
-      <small class="hint" style="width:100%">Mesuré en relisant le PDF généré comme un ATS : lisibilité ${b.format} → ${r.breakdown.format}/100, mots-clés trouvés ${b.motsCles}% → ${r.breakdown.motsCles}%.</small>`;
+      <div class="score-step"><small>Avant</small><b>${before}</b></div>
+      <span class="arrow" aria-hidden="true">→</span>
+      <div class="score-step after${r.score < 75 ? " low" : ""}"><small>Après</small><b>${r.score}</b></div>
+      <div>
+        <span class="verdict v-${r.verdict}">${VERDICT_LABEL[r.verdict]}</span>
+        <p class="compare-note">Score technique sur 100, mesuré en relisant le PDF généré : lisibilité ${b.format} → ${r.breakdown.format}, mots-clés ${b.motsCles} % → ${r.breakdown.motsCles} %.</p>
+      </div>`;
   } catch (e) {
     toast(e.message);
   }
@@ -423,6 +680,8 @@ async function recheck() {
 
 $("#recheckBtn").addEventListener("click", recheck);
 $("#cvPdfBtn").addEventListener("click", () => download("/api/cv/pdf", { cv: readCv() }));
+$("#cvPdfTopBtn").addEventListener("click", () => download("/api/cv/pdf", { cv: readCv() }));
+$("#toLetterBtn").addEventListener("click", () => scrollToEl("#letterTitle"));
 
 // ---------- Lettre de motivation ----------
 function showLetter(key) {
@@ -456,6 +715,7 @@ $("#backBtn").addEventListener("click", () => scrollToEl("#results"));
 $("#restartBtn").addEventListener("click", () => {
   $("#refineForm").reset();
   Object.assign(state, { file: null, analysis: null, adapted: null, jobOffer: "", company: "" });
+  state.addedKeywords.clear();
   $("#letterEditor").innerHTML = "";
   ["#results", "#refine", "#adapted"].forEach((id) => show(id, false));
   $("#hero").classList.remove("compact");

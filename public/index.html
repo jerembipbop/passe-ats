@@ -6,16 +6,16 @@
   <title>Passe ATS — CV alternance</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@400;500&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <!-- Progression -->
   <nav class="stepper" aria-label="Étapes">
     <ol class="wrap">
-      <li data-step="1" class="active"><span class="num">1</span>Dépose ton CV</li>
-      <li data-step="2"><span class="num">2</span>Affine avec l'offre</li>
-      <li data-step="3"><span class="num">3</span>Récupère CV et lettre</li>
+      <li data-step="1" class="active"><button type="button" class="step-btn" data-target="#hero" disabled><span class="num">1</span>Dépose ton CV</button></li>
+      <li data-step="2"><button type="button" class="step-btn" data-target="#results" disabled><span class="num">2</span>Affine avec l'offre</button></li>
+      <li data-step="3"><button type="button" class="step-btn" data-target="#adapted" disabled><span class="num">3</span>Récupère CV et lettre</button></li>
     </ol>
   </nav>
 
@@ -56,55 +56,81 @@
 
   <main class="wrap">
     <!-- Résultat -->
-    <section id="results" class="card hidden">
-      <p class="eyebrow">Résultat de l'analyse</p>
-      <div class="scorebox">
-        <div class="gauge" id="gauge"><span id="scoreValue">0</span><small>/100</small></div>
-        <div>
-          <div class="verdict" id="verdict"></div>
-          <span class="context" id="context"></span>
-          <p id="summary"></p>
-          <div class="breakdown" id="breakdown"></div>
+    <section id="results" class="card result hidden" aria-labelledby="resultTitle">
+      <!-- En-tête : score, verdict et prochaine action -->
+      <div class="result-head">
+        <div class="ring" aria-hidden="true">
+          <svg viewBox="0 0 120 120" width="120" height="120">
+            <circle class="ring-track" cx="60" cy="60" r="52" />
+            <circle class="ring-value" id="ringValue" cx="60" cy="60" r="52" pathLength="100" stroke-dasharray="0 100" />
+          </svg>
+          <p class="ring-label"><span id="scoreValue">0</span><small>/100</small></p>
+        </div>
+        <div class="result-head-text">
+          <p class="context" id="context"></p>
+          <h2 class="result-title" id="resultTitle"><span class="badge" id="verdict"></span></h2>
+          <p class="next-step" id="nextStep"></p>
         </div>
       </div>
 
-      <h3>Verdict par logiciel ATS</h3>
-      <div class="ats-grid" id="atsGrid"></div>
+      <!-- Trois tuiles -->
+      <div class="tiles" id="tiles"></div>
 
-      <h3>Mots-clés</h3>
+      <!-- À corriger en priorité -->
+      <h3 class="result-h">À corriger en priorité</h3>
+      <ol class="fixes" id="fixes"></ol>
+
+      <!-- Mots-clés -->
+      <h3 class="result-h">Mots-clés</h3>
       <p class="hint" id="keywordsHint"></p>
       <div class="chips" id="keywords"></div>
 
-      <div class="grid2 top-gap">
+      <!-- Détails, repliés par défaut -->
+      <div class="accordions">
+        <details class="extra">
+          <summary>Conseils par section</summary>
+          <ul class="plain" id="sections"></ul>
+        </details>
+        <details class="extra">
+          <summary>Verdict par logiciel ATS</summary>
+          <ul class="plain" id="atsList"></ul>
+        </details>
+        <details class="extra">
+          <summary>Vue brute de l'ATS</summary>
+          <ul class="plain" id="checks"></ul>
+          <pre id="rawText"></pre>
+        </details>
+      </div>
+
+      <div class="next-action" id="nextAction">
         <div>
-          <h3>Lecture technique du fichier</h3>
-          <ul class="checks" id="checks"></ul>
+          <p class="next-action-label">Prochaine étape</p>
+          <p class="next-action-text" id="nextActionText"></p>
         </div>
-        <div>
-          <h3>Problèmes à corriger</h3>
-          <ul class="issues" id="issues"></ul>
+        <div class="next-action-buttons">
+          <button type="button" class="btn link" id="nextSecondary"></button>
+          <button type="button" class="btn primary big" id="nextPrimary"></button>
         </div>
       </div>
 
-      <details class="extra">
-        <summary>Conseils par section</summary>
-        <ul class="issues" id="sections"></ul>
-      </details>
-      <details class="extra">
-        <summary>Ce que l'ATS lit réellement dans ton fichier</summary>
-        <pre id="rawText"></pre>
-      </details>
+      <p class="result-foot" id="resultFoot"></p>
     </section>
 
     <!-- Affinage -->
     <section id="refine" class="card hidden">
-      <h2>Affiner le résultat</h2>
-      <p class="subtitle" id="refineIntro"></p>
-      <ul class="suggestions" id="suggestions"></ul>
+      <header class="section-head">
+        <p class="step-label">Étape 2 sur 3</p>
+        <h2>Précise ta candidature</h2>
+        <p class="subtitle" id="refineIntro"></p>
+      </header>
+      <div class="questions" id="questionsBox">
+        <h3>Questions pour un résultat plus juste</h3>
+        <ul class="suggestions" id="suggestions"></ul>
+      </div>
 
       <form id="refineForm" novalidate>
         <fieldset class="offer">
-          <legend>L'offre d'alternance visée</legend>
+          <legend>Offre d'alternance visée</legend>
 
           <label for="offerUrl">Lien de l'annonce</label>
           <div class="input-action">
@@ -154,17 +180,31 @@
 
     <!-- CV adapté et lettre -->
     <section id="adapted" class="card hidden">
-      <h2>Ton CV adapté</h2>
-      <div class="compare" id="compare"></div>
+      <header class="section-head">
+        <p class="step-label">Étape 3 sur 3</p>
+        <h2>Ton CV adapté et ta lettre</h2>
+        <p class="subtitle">Relis, ajuste si besoin, puis télécharge. Tout est modifiable.</p>
+      </header>
 
-      <div class="notice" id="missingBox"></div>
-      <details class="extra" open>
-        <summary>Ce qui a été modifié</summary>
-        <ul id="changes"></ul>
+      <div class="summary-bar">
+        <div class="compare" id="compare"></div>
+        <div class="summary-actions">
+          <button class="btn secondary" id="toLetterBtn" type="button">Voir la lettre</button>
+          <button class="btn primary" id="cvPdfTopBtn" type="button">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/></svg>
+            Télécharger le CV (PDF)
+          </button>
+        </div>
+      </div>
+
+      <div class="to-check" id="missingBox"></div>
+      <details class="extra">
+        <summary id="changesSummary">Ce qui a été modifié</summary>
+        <ul class="plain" id="changes"></ul>
       </details>
 
-      <h3>Relis et corrige ton CV</h3>
-      <p class="hint">Tous les champs sont modifiables. Vérifie chaque ligne : tu dois pouvoir défendre tout ce qui est écrit en entretien.</p>
+      <h3 class="substep"><span class="num">1</span>Relis ton CV</h3>
+      <p class="hint">Vérifie chaque ligne : tu dois pouvoir défendre tout ce qui est écrit en entretien.</p>
       <div id="cvEditor"></div>
 
       <div class="actions">
@@ -175,7 +215,7 @@
         </button>
       </div>
 
-      <h2 class="top-gap">Lettre de motivation</h2>
+      <h3 class="substep" id="letterTitle"><span class="num">2</span>Ta lettre de motivation</h3>
       <div class="tabs" role="tablist">
         <button class="tab active" role="tab" data-letter="cover_letter" type="button">Adaptée à cette candidature</button>
         <button class="tab" role="tab" data-letter="cover_letter_template" type="button">Modèle réutilisable</button>
@@ -199,7 +239,27 @@
     <p class="disclaimer">Aucun outil ne peut accéder aux ATS réels des entreprises : le score simule leur fonctionnement (lecture du fichier, mots-clés, structure) à partir de leurs limites connues. Tes documents sont envoyés à des modèles d'IA gratuits via OpenRouter pour l'analyse et ne sont pas stockés par cette application. Les fournisseurs de modèles gratuits peuvent conserver les données envoyées : évite d'y laisser des informations très sensibles.</p>
   </main>
 
-  <div class="overlay hidden" id="overlay"><div class="spinner"></div><p id="overlayText">Analyse en cours…</p></div>
+  <div class="overlay hidden" id="overlay" role="dialog" aria-modal="true" aria-labelledby="loaderTitle">
+    <div class="loader-card">
+      <p class="eyebrow">Patiente un instant</p>
+      <h2 id="loaderTitle">Analyse de ton CV</h2>
+
+      <div class="loader-percent" aria-hidden="true"><span id="loaderPct">0</span>%</div>
+      <div class="progress" id="loaderBar" role="progressbar" aria-label="Progression estimée" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+        <div class="progress-fill"></div>
+      </div>
+      <p class="loader-stage" id="loaderStage" aria-live="polite"></p>
+      <p class="loader-meta" id="loaderMeta"></p>
+
+      <div class="tip">
+        <p class="tip-label">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>
+          Le saviez-tu ? <span id="tipCount"></span>
+        </p>
+        <p class="tip-text"><span id="tipText"></span><span class="caret" aria-hidden="true"></span></p>
+      </div>
+    </div>
+  </div>
   <div class="toast hidden" id="toast" role="alert"></div>
 
   <script src="app.js"></script>
