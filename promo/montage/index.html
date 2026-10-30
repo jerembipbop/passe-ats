@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="fr" data-resolution="portrait">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Montserrat:wght@400;500&display=block" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      /* Charte de l'application Passe ATS (public/style.css) */
+      :root {
+        --accent: #3b2bd6;
+        --accent-light: #c9c2ff;
+        --ink: #14161c;
+        --paper: #ffffff;
+        --title: "Anton", Impact, sans-serif;
+        --sans: "Montserrat", system-ui, sans-serif;
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--paper); }
+      #root { position: relative; width: 100%; height: 100%; overflow: hidden; font-family: var(--sans); }
+
+      .clip { position: absolute; inset: 0; }
+      video.clip { width: 100%; height: 100%; object-fit: cover; }
+
+      /* Titres : la zone du haut est laissée libre par les plans Remotion */
+      .cap {
+        inset: auto;
+        top: 170px;
+        left: 70px;
+        right: 70px;
+        z-index: 10;
+        font: 400 108px/1.02 var(--title);
+        letter-spacing: 0.005em;
+        color: var(--ink);
+      }
+      .cap.light { color: #fff; }
+      .cap .m { display: inline-block; overflow: hidden; vertical-align: top; padding: 14px 0 6px; margin-top: -14px; margin-right: 0.22em; }
+      .cap .w { display: inline-block; }
+      .cap .hl { color: var(--accent); }
+      .cap.light .hl { color: var(--accent-light); }
+
+      /* Volets de transition, posés au-dessus de tout */
+      .wipe { position: absolute; top: -10%; left: -25%; width: 150%; height: 120%; z-index: 30; }
+      #wipeA { background: var(--accent); }
+      #wipeB { background: var(--ink); }
+
+      /* Barre de progression façon story */
+      #bar { inset: auto; left: 70px; right: 70px; bottom: 90px; height: 10px; border-radius: 99px; background: rgba(20, 22, 28, 0.1); z-index: 20; overflow: hidden; }
+      #barFill { width: 100%; height: 100%; background: var(--accent); transform-origin: left center; transform: scaleX(0); border-radius: 99px; }
+
+      /* Écran final */
+      #outro { background: var(--accent); z-index: 5; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #fff; }
+      #outro .eyebrow { font: 500 34px/1 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent-light); margin-bottom: 40px; }
+      #outro .logo { font: 400 230px/0.95 var(--title); text-transform: uppercase; display: flex; flex-direction: column; }
+      #outro .logo .row { display: block; overflow: hidden; }
+      #outro .logo .row span { display: inline-block; }
+      #outro .tag { font: 500 52px/1.3 var(--sans); margin: 60px 90px 80px; }
+      #outro .cta { font: 500 46px/1 var(--sans); color: var(--accent); background: #fff; padding: 36px 64px; border-radius: 26px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25); }
+      #outro .ring { position: absolute; width: 1500px; height: 1500px; border-radius: 50%; border: 3px solid rgba(255, 255, 255, 0.12); }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="29" data-width="1080" data-height="1920">
+      <!-- Plans animés avec Remotion (promo/remotion) -->
+      <video id="v1" class="clip" data-start="0" data-duration="4" data-track-index="0" src="assets/robots.mp4" muted playsinline></video>
+      <video id="v2" class="clip" data-start="4" data-duration="4" data-track-index="0" src="assets/drop.mp4" muted playsinline></video>
+      <video id="v3" class="clip" data-start="8" data-duration="4.5" data-track-index="0" src="assets/score.mp4" muted playsinline></video>
+      <video id="v4" class="clip" data-start="12.5" data-duration="4" data-track-index="0" src="assets/offer.mp4" muted playsinline></video>
+      <video id="v5" class="clip" data-start="16.5" data-duration="4.5" data-track-index="0" src="assets/adapt.mp4" muted playsinline></video>
+      <video id="v6" class="clip" data-start="21" data-duration="4" data-track-index="0" src="assets/docs.mp4" muted playsinline></video>
+
+      <!-- Écran final -->
+      <div id="outro" class="clip" data-start="25" data-duration="4" data-track-index="1">
+        <div class="ring"></div>
+        <p class="eyebrow">Alternance</p>
+        <div class="logo"><span class="row"><span>Passe</span></span><span class="row"><span>ATS</span></span></div>
+        <p class="tag">Ton CV passe les robots recruteurs.</p>
+        <div class="cta">Dépose ton CV</div>
+      </div>
+
+      <!-- Titres : *mot* = mot mis en couleur -->
+      <h2 id="c1" class="cap light clip" data-start="0" data-duration="4" data-track-index="2">Ton CV est lu par un *robot* avant un humain.</h2>
+      <h2 id="c2" class="cap clip" data-start="4" data-duration="4" data-track-index="2">Dépose-le dans *Passe ATS*.</h2>
+      <h2 id="c3" class="cap clip" data-start="8" data-duration="4.5" data-track-index="2">Ta *note sur 100* en moins d'une minute.</h2>
+      <h2 id="c4" class="cap clip" data-start="12.5" data-duration="4" data-track-index="2">Colle l'offre : vois les *mots-clés* qui manquent.</h2>
+      <h2 id="c5" class="cap clip" data-start="16.5" data-duration="4.5" data-track-index="2">Ton CV *réécrit* pour l'offre.</h2>
+      <h2 id="c6" class="cap clip" data-start="21" data-duration="4" data-track-index="2">CV et lettre *prêts à envoyer*.</h2>
+
+      <div id="bar" class="clip" data-start="0" data-duration="25" data-track-index="3"><div id="barFill"></div></div>
+
+      <div id="wipeA" class="wipe clip" data-start="0" data-duration="29" data-track-index="4"></div>
+      <div id="wipeB" class="wipe clip" data-start="0" data-duration="29" data-track-index="4"></div>
+
+      <!-- Son : musique synthétisée et souffle à chaque coupe -->
+      <audio id="music" data-start="0" data-duration="29" data-track-index="5" data-volume="0.8" src="assets/music.wav"></audio>
+      <audio id="whoosh1" data-start="3.7" data-duration="0.5" data-track-index="6" data-volume="0.6" src="assets/whoosh.wav"></audio>
+      <audio id="whoosh2" data-start="7.7" data-duration="0.5" data-track-index="6" data-volume="0.6" src="assets/whoosh.wav"></audio>
+      <audio id="whoosh3" data-start="12.2" data-duration="0.5" data-track-index="6" data-volume="0.6" src="assets/whoosh.wav"></audio>
+      <audio id="whoosh4" data-start="16.2" data-duration="0.5" data-track-index="6" data-volume="0.6" src="assets/whoosh.wav"></audio>
+      <audio id="whoosh5" data-start="20.7" data-duration="0.5" data-track-index="6" data-volume="0.6" src="assets/whoosh.wav"></audio>
+      <audio id="whoosh6" data-start="24.7" data-duration="0.5" data-track-index="6" data-volume="0.6" src="assets/whoosh.wav"></audio>
+    </div>
+    <script>
+      // Découpe chaque titre en mots masqués pour les faire monter un par un
+      document.querySelectorAll(".cap").forEach((el) => {
+        el.innerHTML = el.textContent
+          .trim()
+          .split(/(\*[^*]+\*)/)
+          .flatMap((part) => {
+            const hl = part.startsWith("*");
+            return part
+              .replace(/\*/g, "")
+              .split(/\s+/)
+              .filter(Boolean)
+              .map((w) => ({ w, hl }));
+          })
+          // La ponctuation seule reste collée au mot précédent
+          .reduce((acc, t) => {
+            if (/^[.,;!?]+$/.test(t.w) && acc.length) acc[acc.length - 1].w += t.w;
+            else acc.push(t);
+            return acc;
+          }, [])
+          .map(({ w, hl }) => `<span class="m"><span class="w${hl ? " hl" : ""}">${w}</span></span>`)
+          .join("");
+      });
+
+      // Position de départ des volets gérée par GSAP seul, pour ne pas cumuler deux translations
+      gsap.set(".wipe", { xPercent: -120, skewX: -12 });
+
+      const tl = gsap.timeline({ paused: true });
+      const shots = [
+        { v: "#v1", c: "#c1", start: 0, end: 4 },
+        { v: "#v2", c: "#c2", start: 4, end: 8 },
+        { v: "#v3", c: "#c3", start: 8, end: 12.5 },
+        { v: "#v4", c: "#c4", start: 12.5, end: 16.5 },
+        { v: "#v5", c: "#c5", start: 16.5, end: 21 },
+        { v: "#v6", c: "#c6", start: 21, end: 25 },
+      ];
+
+      shots.forEach((s, i) => {
+        // Léger zoom d'entrée sur chaque plan
+        tl.fromTo(s.v, { scale: 1.1 }, { scale: 1, duration: 0.7, ease: "power3.out" }, s.start);
+        // Titre : les mots montent, puis sortent juste avant la coupe
+        tl.fromTo(`${s.c} .w`, { yPercent: 110 }, { yPercent: 0, duration: 0.55, ease: "power4.out", stagger: 0.07 }, s.start + 0.15);
+        tl.to(`${s.c} .w`, { yPercent: -110, duration: 0.3, ease: "power2.in", stagger: 0.02 }, s.end - 0.5);
+        // Volet qui couvre la coupe, couleur alternée
+        const wipe = i % 2 === 0 ? "#wipeA" : "#wipeB";
+        tl.fromTo(wipe, { xPercent: -120 }, { xPercent: 0, duration: 0.25, ease: "power2.in", immediateRender: false }, s.end - 0.25);
+        tl.to(wipe, { xPercent: 120, duration: 0.3, ease: "power2.out" }, s.end);
+      });
+
+      tl.fromTo("#barFill", { scaleX: 0 }, { scaleX: 1, duration: 25, ease: "none" }, 0);
+
+      // Écran final
+      tl.fromTo("#outro .row span", { yPercent: 110 }, { yPercent: 0, duration: 0.7, ease: "power4.out", stagger: 0.12 }, 25.15);
+      tl.fromTo("#outro .eyebrow", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.5, ease: "power3.out" }, 25.3);
+      tl.fromTo("#outro .tag", { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, ease: "power3.out" }, 25.6);
+      tl.fromTo("#outro .cta", { scale: 0.6, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.6, ease: "back.out(2.2)" }, 26);
+      tl.to("#outro .cta", { scale: 1.06, duration: 0.25, ease: "power1.inOut", yoyo: true, repeat: 3 }, 27);
+      tl.fromTo("#outro .ring", { scale: 0.3, opacity: 0 }, { scale: 1.1, opacity: 1, duration: 3.5, ease: "power2.out" }, 25.2);
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

@@ -1,0 +1,6 @@
+node_modules/
+remotion/out/
+montage/.hyperframes/
+montage/renders/
+*.mp4
+!montage/assets/*.mp4
