@@ -42,7 +42,8 @@ Il faut un fichier `.env` à la racine, construit sur le modèle de `.env.exampl
 
 Routes (toutes en `POST`) :
 
-- `/api/analyze` : envoi du fichier en multipart.
+- `/api/analyze` : envoi du fichier en multipart. Réponse progressive, une ligne JSON par événement : `local` (tests locaux, < 1 s), `stage`, `keywords`, `done`, `error`.
+- `/api/offer/keywords` : prépare en arrière-plan les mots-clés d'une offre dès qu'elle est connue
 - `/api/offer/import`
 - `/api/adapt`
 - `/api/cv/check`
@@ -60,6 +61,8 @@ Routes (toutes en `POST`) :
 - **Réponses de l'IA** : elles passent par `conform()`, qui remplit les champs manquants et corrige les types. Le front peut donc compter sur la présence de chaque champ du schéma.
 - **Nouveau champ dans un schéma** : prévois une valeur de repli côté front, pour les analyses produites avant le changement (exemple : `a.ai.next_step || a.ai.summary`).
 - **Consignes données à l'IA** : en français, en tutoyant le candidat. La règle « n'invente jamais d'expérience, de diplôme, d'outil, de chiffre ou de compétence » est non négociable. Seules les compétences confirmées par le candidat (chips cliqués) peuvent être ajoutées.
+- **Vitesse** : l'analyse fait deux appels en parallèle (mots-clés, diagnostic) avec `effort: "none"`, donc sans réflexion interne (12 s au lieu de 50 à 80 s, qualité comparable). `cleanFixes()` retire les erreurs connues de ce mode (dates « passées » ou « futures », chiffres donnés en exemple). L'adaptation garde la réflexion : sans elle, l'IA invente des chiffres et des expériences.
+- **Cache** (`lib/cache.js`) : analyses, mots-clés et adaptations identiques sont servis depuis la mémoire, et une demande en cours est partagée. Le navigateur lance l'adaptation en avance dès la fin d'une analyse avec offre.
 - **Quota** : le compte gratuit est limité à **50 requêtes par jour**, tous modèles confondus. Une analyse ou une adaptation coûte au moins 1 requête (davantage si des modèles sont écartés). Ne lance pas de vrais appels en boucle pour tester.
 
 ## Score
@@ -95,7 +98,7 @@ Le score est calculé dans `lib/atsChecks.js` et `server.js` : 40 % note de l'IA
   - Une tuile n'est en alerte que si son score est sous 75. Les autres sont en vert pastel.
   - Les détails techniques restent dans des sections repliées.
   - Le nom technique du modèle n'apparaît qu'en info-bulle.
-- **Chargement** : progression *estimée* via `startLoader(kind)` et `stopLoader(success)`, avec des astuces tapées lettre par lettre. Toute nouvelle attente longue doit les réutiliser.
+- **Attente** : l'analyse s'affiche dans la carte de résultat (`startScan`, `scanStep`, `finishScan`) avec des étapes réelles ; l'adaptation utilise la fenêtre `startLoader(kind)` / `stopLoader(success)`. Les deux proposent le quiz « vrai ou faux » (`renderQuiz`). Toute nouvelle attente longue doit réutiliser ces éléments.
 - **Mise en page** : elle doit tenir à 375 px de large sans défilement horizontal.
 
 ## Vérifications avant de terminer
@@ -107,7 +110,7 @@ for f in server.js lib/*.js public/app.js; do node --check "$f"; done
 ```
 
 - Relance le serveur après toute modification côté serveur : `npm start` ne recharge pas tout seul.
-- **Tester l'interface sans consommer le quota** : dans la console du navigateur, remplace `window.fetch` pour `/api/analyze` ou `/api/adapt` par une réponse simulée qui respecte le schéma, puis déclenche un dépôt avec un `DragEvent("drop")`.
+- **Tester l'interface sans consommer le quota** : dans la console du navigateur, remplace `window.fetch` pour `/api/analyze` ou `/api/adapt` par une réponse simulée qui respecte le schéma (pour `/api/analyze`, des lignes JSON `local` puis `done`), puis déclenche un dépôt avec un `DragEvent("drop")`.
 - **Génération PDF** : vérifie qu'elle se relit avec `extractCv()`, accents compris (ç, é, œ, ’).
 - **Import d'annonce** : teste-le sur une vraie page publique (Greenhouse, Lever). Indeed et LinkedIn bloquent souvent la lecture, c'est un comportement attendu.
 

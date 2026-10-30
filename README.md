@@ -38,13 +38,13 @@ Aucun outil n'a accès aux ATS réels des entreprises : le score est une simulat
 
 ## Modèles d'IA utilisés
 
-Uniquement des modèles **gratuits** d'OpenRouter. La liste des modèles gratuits est relue toutes les heures, et les meilleurs sont essayés dans l'ordre (Nemotron 3 Ultra, Inkling, Nemotron 3.5 Super, Gemma 4…). Si un modèle est saturé, retiré ou répond mal, le suivant prend le relais automatiquement et le modèle défaillant est mis de côté quelques minutes.
+Uniquement des modèles **gratuits** d'OpenRouter. La liste des modèles gratuits est relue toutes les heures, et ils sont essayés du plus rapide au plus lent à qualité comparable, d'après des mesures sur une même analyse (dots-3-note, Nemotron 3.5 Super, Nemotron 3 Ultra, Gemma 4…). Si un modèle est saturé, retiré ou répond mal, le suivant prend le relais automatiquement et le modèle défaillant est mis de côté quelques minutes.
 
 Pour imposer ta propre liste : `OPENROUTER_MODELS=modele1:free,modele2:free` dans `.env`.
 
 Limites des modèles gratuits :
-- **50 requêtes par jour** sur un compte sans crédit (1000 par jour dès 10 $ de crédit sur OpenRouter). Une candidature complète en utilise 2 ou 3.
-- Plus lents : 1 à 2 minutes pour l'analyse, 2 à 3 minutes pour le CV et la lettre.
+- **50 requêtes par jour** sur un compte sans crédit (1000 par jour dès 10 $ de crédit sur OpenRouter). Une candidature complète en utilise 3 (2 pour l'analyse, 1 pour le CV et la lettre) ; une analyse identique déjà faite n'en consomme aucune.
+- Analyse en 10 à 20 secondes : la lisibilité s'affiche tout de suite, puis les mots-clés, puis le diagnostic. Le CV et la lettre prennent 1 à 3 minutes, mais leur préparation démarre en arrière-plan dès la fin de l'analyse.
 - Les fournisseurs de modèles gratuits peuvent conserver les données envoyées.
 
 ## Structure
@@ -54,6 +54,7 @@ Limites des modèles gratuits :
 - `lib/atsChecks.js` : tests de lisibilité et couverture des mots-clés
 - `lib/ai.js` : consignes données à l'IA (analyse, adaptation, extraction d'annonce)
 - `lib/llm.js` : client OpenRouter et bascule entre modèles gratuits
+- `lib/cache.js` : mémoire des réponses déjà calculées
 - `lib/jobOffer.js` : import d'une annonce à partir de son lien
 - `lib/pdf.js` : génération du CV et de la lettre en PDF
 - `public/` : interface web

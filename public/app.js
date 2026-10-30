@@ -19,41 +19,101 @@ function setStep(step) {
   state.maxStep = step === 1 ? 1 : Math.max(state.maxStep || 1, step);
   document.querySelectorAll(".stepper li").forEach((li) => {
     const n = Number(li.dataset.step);
+    const btn = li.querySelector(".step-btn");
     li.classList.toggle("active", n === step);
     li.classList.toggle("done", n < step);
     li.toggleAttribute("aria-current", n === step);
-    li.querySelector(".step-btn").disabled = n > state.maxStep || n === step;
+    // L'étape 2 regroupe le résultat et l'affinage : depuis l'affinage, on peut revenir au résultat.
+    btn.disabled = n > state.maxStep || (n === step && (n === 1 || btn.dataset.target === state.panel || !state.reachable.has(btn.dataset.target)));
   });
 }
 document.querySelectorAll(".step-btn").forEach((btn) => btn.addEventListener("click", () => {
   const target = btn.dataset.target;
   if (target === "#hero") window.scrollTo({ top: 0, behavior: "smooth" });
-  else scrollToEl(target);
+  else goTo(state.reachable.has(target) ? target : "#refine");
 }));
+
+// ---------- Écrans : un seul à la fois, qui glissent de droite à gauche ----------
+// Le résultat s'affiche seul en haut de page : plus besoin de défiler pour le voir.
+const PANELS = ["#results", "#refine", "#adapted"];
+const PANEL_STEP = { "#results": 2, "#refine": 2, "#adapted": 3 };
+state.reachable = new Set();
+
+function goTo(id) {
+  const from = state.panel;
+  state.panel = id;
+  PANELS.forEach((p) => show(p, p === id));
+  const el = $(id);
+  el.style.transform = "";
+  el.classList.remove("slide-forward", "slide-back");
+  if (from && from !== id) {
+    void el.offsetWidth; // relance l'animation
+    el.classList.add(PANELS.indexOf(id) > PANELS.indexOf(from) ? "slide-forward" : "slide-back");
+  }
+  setStep(PANEL_STEP[id]);
+  window.scrollTo({ top: 0 });
+}
+
+// Écran voisin déjà débloqué, dans un sens (+1 suivant, -1 précédent).
+function neighbour(dir) {
+  for (let i = PANELS.indexOf(state.panel) + dir; i >= 0 && i < PANELS.length; i += dir) {
+    if (state.reachable.has(PANELS[i])) return PANELS[i];
+  }
+  return null;
+}
+
+// Glisser au doigt : l'écran suit le doigt, puis on change d'écran au-delà d'un seuil.
+// Les champs de saisie et l'aperçu gardent leur comportement normal.
+(() => {
+  const main = $("main");
+  let start = null;
+  let lock = null; // "x" si le geste est horizontal, "y" s'il est vertical
+  const ignored = (t) => t.closest("input, textarea, select, pre, .preview, [contenteditable]");
+
+  main.addEventListener("touchstart", (ev) => {
+    if (!state.panel || ev.touches.length > 1 || ignored(ev.target) || !$("#overlay").classList.contains("hidden")) return;
+    start = { x: ev.touches[0].clientX, y: ev.touches[0].clientY };
+    lock = null;
+  }, { passive: true });
+
+  main.addEventListener("touchmove", (ev) => {
+    if (!start) return;
+    const dx = ev.touches[0].clientX - start.x;
+    const dy = ev.touches[0].clientY - start.y;
+    if (!lock && Math.hypot(dx, dy) > 10) lock = Math.abs(dx) > Math.abs(dy) * 1.5 ? "x" : "y";
+    if (lock !== "x") return;
+    // Résistance quand il n'y a pas d'écran de ce côté.
+    const blocked = !neighbour(dx < 0 ? 1 : -1);
+    $(state.panel).style.transform = `translateX(${blocked ? dx / 5 : dx / 2}px)`;
+  }, { passive: true });
+
+  main.addEventListener("touchend", (ev) => {
+    if (!start) return;
+    const dx = ev.changedTouches[0].clientX - start.x;
+    const panel = $(state.panel);
+    const target = lock === "x" && Math.abs(dx) > 70 ? neighbour(dx < 0 ? 1 : -1) : null;
+    start = null;
+    if (target) return goTo(target);
+    panel.classList.add("snap");
+    panel.style.transform = "";
+    setTimeout(() => panel.classList.remove("snap"), 220);
+  });
+  main.addEventListener("touchcancel", () => {
+    if (start && state.panel) $(state.panel).style.transform = "";
+    start = null;
+  });
+})();
 function setLoading(btn, loading) {
   btn.classList.toggle("loading", loading);
   btn.disabled = loading;
 }
 
-// ---------- Chargement : progression estimée et astuces ----------
-// L'IA répond en un seul bloc : la progression est une estimation fondée sur la durée
-// des traitements précédents, qui ralentit à l'approche de la fin puis saute à 100 %.
+// ---------- Attente : progression, étapes réelles et quiz ----------
 const LOADS = {
-  analyze: {
-    title: "Analyse de ton CV",
-    expected: 110000,
-    stages: [
-      [0, "Lecture de ton fichier comme le ferait un ATS"],
-      [8, "Vérification de la lisibilité et des sections"],
-      [18, "Repérage des mots-clés attendus"],
-      [32, "Analyse approfondie par l'IA"],
-      [65, "Verdict pour chaque logiciel de recrutement"],
-      [85, "Calcul de ton score final"],
-    ],
-  },
+  analyze: { expected: 60000 },
   adapt: {
     title: "Création de ton CV et de ta lettre",
-    expected: 130000,
+    expected: 100000,
     stages: [
       [0, "Préparation de ton profil"],
       [10, "Réécriture de ton CV pour l'offre"],
@@ -65,47 +125,75 @@ const LOADS = {
   },
 };
 
-const TIPS = [
-  "La plupart des grandes entreprises trient les candidatures avec un ATS avant qu'un humain ne les lise.",
-  "Un recruteur parcourt souvent un CV en moins de 10 secondes : mets l'essentiel en haut.",
-  "Reprends le titre exact de l'offre dans l'intitulé de ton CV : c'est souvent le premier filtre de l'ATS.",
-  "Les ATS lisent mal les CV en deux colonnes : une seule colonne, c'est le plus sûr.",
-  "Évite les barres de niveau et les étoiles pour tes compétences : un ATS ne sait pas les lire.",
-  "Ne mets jamais ton e-mail ou ton téléphone dans l'en-tête du document : beaucoup d'ATS l'ignorent.",
-  "Utilise des titres de section classiques : « Expérience », « Formation », « Compétences ».",
-  "Commence chaque mission par un verbe d'action : « Géré », « Rédigé », « Analysé »…",
-  "Un chiffre vaut mieux qu'un adjectif : « 12 articles publiés » plutôt que « nombreux articles ».",
-  "Pour une alternance, indique ton rythme (ex. 3 semaines / 1 semaine) dès le titre du CV.",
-  "Précise ta date de début et la durée du contrat : c'est la première question des entreprises.",
-  "Nomme ton fichier « CV_Prénom_Nom_Alternance.pdf » : c'est plus pro et plus facile à retrouver.",
-  "Envoie toujours ton CV en PDF texte, jamais en image ou en scan.",
-  "Une page suffit pour une alternance : les recruteurs préfèrent la clarté à l'exhaustivité.",
-  "Adapte ton CV à chaque offre : c'est ce qui fait le plus monter ton score de mots-clés.",
-  "Les mots-clés doivent apparaître dans tes expériences, pas seulement dans une liste de compétences.",
-  "Relance l'entreprise une semaine après ta candidature : peu de candidats le font, ça se remarque.",
-  "Ta lettre de motivation doit parler de l'entreprise avant de parler de toi.",
-  "L'école peut t'aider : beaucoup de CFA ont des listes d'entreprises qui cherchent des alternants.",
-  "Postule tôt : les offres d'alternance pour septembre sont souvent pourvues dès le printemps.",
-  "Ton profil LinkedIn doit raconter la même histoire que ton CV : les recruteurs vérifient.",
-  "Les fautes d'orthographe font partie des premiers motifs de rejet : fais-toi relire.",
+// Quiz « vrai ou faux » pour rendre l'attente utile : chaque réponse explique la règle.
+const QUIZ = [
+  { q: "Un CV en deux colonnes est toujours bien lu par les ATS.", a: false, why: "Certains ATS lisent ligne par ligne et mélangent les deux colonnes. Une seule colonne est le choix le plus sûr." },
+  { q: "Ton e-mail placé dans l'en-tête du document Word peut devenir invisible pour un ATS.", a: true, why: "Beaucoup d'ATS ignorent les en-têtes et pieds de page. Mets tes coordonnées dans le corps du CV." },
+  { q: "Les barres de niveau (★★★☆) aident l'ATS à comprendre tes compétences.", a: false, why: "Un ATS ne lit que du texte : écris plutôt « Anglais : B2 » ou « Excel : avancé »." },
+  { q: "Reprendre l'intitulé exact de l'offre dans le titre de ton CV peut t'aider à passer le filtre.", a: true, why: "Le titre du poste fait souvent partie des premiers critères de recherche des recruteurs." },
+  { q: "Un CV scanné en image est lu comme du texte par les ATS.", a: false, why: "Sans texte sélectionnable, la plupart des ATS voient une page presque vide. Exporte ton CV en PDF depuis ton logiciel." },
+  { q: "« Expérience professionnelle » vaut mieux que « Mon aventure » comme titre de section.", a: true, why: "Les ATS rangent ton contenu grâce à des titres de section standards." },
+  { q: "Un mot-clé gagne à apparaître aussi dans une expérience concrète, pas seulement dans une liste.", a: true, why: "L'ATS le trouve dans les deux cas, mais le recruteur est convaincu par l'usage concret que tu en as fait." },
+  { q: "Envoyer le même CV à toutes les offres est la meilleure stratégie.", a: false, why: "Chaque offre a ses propres mots-clés : un CV adapté les reprend et monte dans le classement." },
+  { q: "Le PDF exporté depuis Word ou Google Docs est en général bien lu par les ATS.", a: true, why: "Un PDF qui contient du vrai texte se lit bien. Ce sont les images et les mises en page complexes qui posent problème." },
+  { q: "Pour une alternance, indiquer ton rythme et ta date de début est inutile.", a: false, why: "Ce sont les premières questions des entreprises : les afficher dès le titre te fait gagner du temps." },
+  { q: "Une abréviation comme « GA4 » est toujours reconnue comme « Google Analytics 4 ».", a: false, why: "Pas forcément : écris les deux formes au moins une fois, par exemple « Google Analytics 4 (GA4) »." },
+  { q: "Des icônes à la place des mots (téléphone, enveloppe) peuvent devenir des caractères illisibles.", a: true, why: "Les polices d'icônes ressortent souvent en symboles bizarres. Écris « Téléphone : » en toutes lettres." },
 ];
 
+const quizState = { order: [...QUIZ.keys()].sort(() => Math.random() - 0.5), n: 0, right: 0, answered: 0 };
+const quizScore = () => (quizState.answered ? `${quizState.right} bonne${quizState.right > 1 ? "s" : ""} réponse${quizState.right > 1 ? "s" : ""} sur ${quizState.answered}` : "");
+
+function renderQuiz(el) {
+  const q = QUIZ[quizState.order[quizState.n % QUIZ.length]];
+  el.innerHTML = `
+    <p class="quiz-label">En attendant : vrai ou faux ? <span>${quizScore()}</span></p>
+    <p class="quiz-q">${esc(q.q)}</p>
+    <div class="quiz-actions">
+      <button type="button" class="btn secondary" data-answer="true">Vrai</button>
+      <button type="button" class="btn secondary" data-answer="false">Faux</button>
+    </div>`;
+}
+
+["#scanQuiz", "#loaderQuiz"].forEach((id) => $(id).addEventListener("click", (ev) => {
+  const el = $(id);
+  if (ev.target.closest("[data-next]")) {
+    quizState.n++;
+    return renderQuiz(el);
+  }
+  const btn = ev.target.closest("[data-answer]");
+  if (!btn) return;
+  const q = QUIZ[quizState.order[quizState.n % QUIZ.length]];
+  const ok = (btn.dataset.answer === "true") === q.a;
+  quizState.answered++;
+  if (ok) quizState.right++;
+  el.innerHTML = `
+    <p class="quiz-label">En attendant : vrai ou faux ? <span>${quizScore()}</span></p>
+    <p class="quiz-q">${esc(q.q)}</p>
+    <p class="quiz-feedback ${ok ? "ok" : "ko"}"><strong>${ok ? "Bonne réponse" : "Pas tout à fait"} : c'est ${q.a ? "vrai" : "faux"}.</strong> ${esc(q.why)}</p>
+    <button type="button" class="btn link" data-next>Question suivante →</button>`;
+}));
+
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-const loader = { timer: null, tipTimer: null };
+const loader = { timer: null };
 
 function expectedDuration(kind) {
   try {
-    const past = JSON.parse(localStorage.getItem(`duree_${kind}`) || "[]");
+    const past = JSON.parse(localStorage.getItem(`duree_${kind}_v2`) || "[]");
     if (past.length) return past.reduce((a, b) => a + b, 0) / past.length;
   } catch {}
   return LOADS[kind].expected;
 }
 function rememberDuration(kind, ms) {
   try {
-    const past = JSON.parse(localStorage.getItem(`duree_${kind}`) || "[]");
-    localStorage.setItem(`duree_${kind}`, JSON.stringify([...past, ms].slice(-5)));
+    const past = JSON.parse(localStorage.getItem(`duree_${kind}_v2`) || "[]");
+    localStorage.setItem(`duree_${kind}_v2`, JSON.stringify([...past, ms].slice(-5)));
   } catch {}
 }
+
+const fmtTime = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
+// Progression estimée : avance vite au début, ralentit à l'approche de la durée habituelle.
+const easedPct = (elapsed, expected) => Math.min(97, Math.floor(97 * (1 - Math.exp((-2.4 * elapsed) / expected))));
 
 function setProgress(pct) {
   $("#loaderPct").textContent = pct;
@@ -113,36 +201,7 @@ function setProgress(pct) {
   $("#loaderBar .progress-fill").style.width = `${pct}%`;
 }
 
-const fmtTime = (ms) => `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, "0")}`;
-
-// Astuces écrites lettre par lettre, l'une après l'autre, dans un ordre aléatoire.
-function startTips() {
-  const order = [...TIPS.keys()].sort(() => Math.random() - 0.5);
-  let n = 0;
-  const next = () => {
-    const tip = TIPS[order[n % order.length]];
-    $("#tipCount").textContent = `${(n % order.length) + 1}/${TIPS.length}`;
-    n++;
-    const el = $("#tipText");
-    if (reduceMotion) {
-      el.textContent = tip;
-      loader.tipTimer = setTimeout(next, 7000);
-      return;
-    }
-    let i = 0;
-    const type = () => {
-      el.textContent = tip.slice(0, ++i);
-      loader.tipTimer = i < tip.length ? setTimeout(type, 24) : setTimeout(erase, 4500);
-    };
-    const erase = () => {
-      el.textContent = el.textContent.slice(0, -3);
-      loader.tipTimer = el.textContent ? setTimeout(erase, 10) : setTimeout(next, 250);
-    };
-    type();
-  };
-  next();
-}
-
+// Fenêtre de chargement, utilisée pour l'adaptation (réponse d'un seul bloc).
 function startLoader(kind) {
   const cfg = LOADS[kind];
   const expected = expectedDuration(kind);
@@ -151,10 +210,11 @@ function startLoader(kind) {
   $("#overlay").classList.remove("hidden", "finished");
   $("#loaderTitle").textContent = cfg.title;
   setProgress(0);
+  renderQuiz($("#loaderQuiz"));
 
   const tick = () => {
     const elapsed = Date.now() - started;
-    const pct = Math.min(97, Math.floor(97 * (1 - Math.exp((-2.4 * elapsed) / expected))));
+    const pct = easedPct(elapsed, expected);
     setProgress(pct);
     $("#loaderStage").textContent = cfg.stages.filter(([from]) => pct >= from).at(-1)[1];
     $("#loaderMeta").textContent = elapsed > expected * 1.15
@@ -164,22 +224,71 @@ function startLoader(kind) {
   tick();
   clearInterval(loader.timer);
   loader.timer = setInterval(tick, 400);
-  clearTimeout(loader.tipTimer);
-  startTips();
 }
 
-// Termine le chargement : en cas de succès, la barre se remplit avant de disparaître.
 async function stopLoader(success) {
   clearInterval(loader.timer);
   if (success) {
-    rememberDuration(loader.kind, Date.now() - loader.started);
+    const ms = Date.now() - loader.started;
+    if (ms > 3000) rememberDuration(loader.kind, ms); // une réponse déjà prête ne fausse pas l'estimation
     $("#overlay").classList.add("finished");
     setProgress(100);
     $("#loaderStage").textContent = "Terminé !";
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 600));
   }
-  clearTimeout(loader.tipTimer);
   $("#overlay").classList.add("hidden");
+}
+
+// Suivi de l'analyse, affiché dans la carte de résultat : les étapes cochées sont réelles.
+const SCAN_WEIGHT = { read: 5, format: 10, keywords: 35, diagnosis: 50 };
+const scan = { timer: null, started: 0, done: new Set(), tries: {} };
+
+function scanStep(name, status) {
+  const li = $(`[data-scan="${name}"]`);
+  li.classList.remove("active", "done");
+  li.classList.add(status);
+  if (status === "done") scan.done.add(name);
+}
+
+function startScan() {
+  Object.assign(scan, { started: Date.now(), done: new Set(), tries: {} });
+  const expected = expectedDuration("analyze");
+  $("#scan").className = "scan";
+  $("#scanTitle").textContent = "Analyse en cours";
+  show("#scanRetry", false);
+  document.querySelectorAll("[data-scan]").forEach((li) => (li.className = ""));
+  scanStep("read", "active");
+  renderQuiz($("#scanQuiz"));
+  const tick = () => {
+    const elapsed = Date.now() - scan.started;
+    const fromSteps = [...scan.done].reduce((s, k) => s + SCAN_WEIGHT[k], 0);
+    const pct = Math.min(97, Math.max(fromSteps, easedPct(elapsed, expected)));
+    $("#scanBar").setAttribute("aria-valuenow", pct);
+    $("#scanBar .progress-fill").style.width = `${pct}%`;
+    $("#scanTime").textContent = elapsed > expected * 1.2
+      ? `${fmtTime(elapsed)} · les modèles gratuits sont chargés, ça arrive`
+      : `${fmtTime(elapsed)} · environ ${fmtTime(Math.max(0, expected - elapsed))} restantes`;
+  };
+  tick();
+  clearInterval(scan.timer);
+  scan.timer = setInterval(tick, 400);
+}
+
+function finishScan({ cached }) {
+  clearInterval(scan.timer);
+  const ms = Date.now() - scan.started;
+  if (!cached) rememberDuration("analyze", ms);
+  $("#scan").className = "scan done";
+  $("#scanTitle").textContent = cached ? "Résultat déjà calculé, affiché tout de suite" : `Analyse terminée en ${fmtTime(ms)}`;
+  $("#scanTime").textContent = quizScore() ? `Quiz : ${quizScore()}` : "";
+}
+
+function failScan(message) {
+  clearInterval(scan.timer);
+  $("#scan").className = "scan failed";
+  $("#scanTitle").textContent = "L'analyse n'a pas pu aboutir";
+  $("#scanTime").textContent = message;
+  show("#scanRetry", true);
 }
 function toast(msg) {
   const t = $("#toast");
@@ -283,30 +392,146 @@ async function runAnalysis() {
   fd.append("company", $("#company").value.trim());
   fd.append("profile", JSON.stringify(profile()));
 
-  startLoader("analyze");
+  // Le résultat s'affiche tout de suite et se remplit au fil de l'analyse.
+  const run = (state.analysisRun = (state.analysisRun || 0) + 1);
+  const jobOffer = fd.get("jobOffer");
+  $("#fileName").textContent = state.file.name;
+  $("#hero").classList.add("compact");
+  showPendingResult(!!jobOffer);
+  startScan();
+  state.reachable = new Set(["#results"]);
+  goTo("#results");
+
   let analysis;
+  let cached = true;
   try {
-    analysis = await api("/api/analyze", fd);
+    const res = await fetch("/api/analyze", { method: "POST", body: fd });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Erreur ${res.status}`);
+    for await (const event of readEvents(res)) {
+      if (run !== state.analysisRun) return false; // une analyse plus récente a pris le relais
+      if (event.type === "local") {
+        scanStep("read", "done");
+        scanStep("format", "done");
+        renderLocalResult(event);
+      } else if (event.type === "stage") {
+        cached = false;
+        scan.tries[event.stage] = (scan.tries[event.stage] || 0) + 1;
+        scanStep(event.stage, "active");
+        if (scan.tries[event.stage] > 1) $("#scanTime").textContent = "Un modèle gratuit était saturé : bascule sur un autre…";
+      } else if (event.type === "keywords") {
+        scanStep("keywords", "done");
+        renderKeywordsPartial(event);
+      } else if (event.type === "done") {
+        analysis = event.analysis;
+      } else if (event.type === "error") {
+        throw new Error(event.error);
+      }
+    }
+    if (!analysis) throw new Error("L'analyse s'est interrompue. Relance-la.");
   } catch (e) {
-    await stopLoader(false);
+    if (run !== state.analysisRun) return false;
+    failScan(e.message);
     toast(e.message);
     return false;
   }
-  await stopLoader(true);
+
+  scanStep("keywords", "done");
+  scanStep("diagnosis", "done");
+  finishScan({ cached });
   state.analysis = analysis;
-  state.jobOffer = fd.get("jobOffer");
+  state.jobOffer = jobOffer;
   state.company = fd.get("company") || analysis.company || "";
-  $("#fileName").textContent = state.file.name;
-  $("#hero").classList.add("compact");
+  $("#results").classList.remove("pending");
   renderAnalysis(analysis);
+  animateScore(analysis.score);
   renderRefine(analysis);
   $("#reanalyzeBtn").classList.replace("primary", "secondary");
-  show("#results");
-  show("#refine");
-  show("#adapted", false);
+  state.reachable = new Set(["#results", "#refine"]);
+  state.maxStep = 2;
   setStep(2);
-  scrollToEl("#results");
+  if (analysis.hasOffer) prefetchAdapt();
   return true;
+}
+
+// Lit la réponse progressive du serveur : une ligne JSON par événement.
+async function* readEvents(res) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (value) buffer += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buffer.indexOf("\n")) >= 0) {
+      const line = buffer.slice(0, nl).trim();
+      buffer = buffer.slice(nl + 1);
+      if (line) yield JSON.parse(line);
+    }
+    if (done) break;
+  }
+}
+
+$("#scanRetry").addEventListener("click", () => runAnalysis());
+
+// Carte de résultat « en attente » : chaque partie se remplit dès qu'elle est prête.
+function showPendingResult(hasOffer) {
+  $("#results").classList.add("pending");
+  $(".ring").classList.remove("pass");
+  $("#ringValue").setAttribute("stroke-dasharray", "0 100");
+  $("#scoreValue").textContent = "–";
+  $("#verdict").className = "badge waiting";
+  $("#verdict").textContent = "Analyse en cours";
+  $("#context").textContent = hasOffer ? `Comparé à l'offre${$("#company").value.trim() ? ` · ${$("#company").value.trim()}` : ""}` : "Analyse générale";
+  $("#nextStep").textContent = "Ton diagnostic arrive. En attendant, tente le quiz juste au-dessus.";
+  renderTiles({});
+  $("#fixes").innerHTML = '<li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li>';
+  $("#keywordsHint").textContent = "Les mots-clés attendus arrivent…";
+  $("#keywords").innerHTML = '<span class="chip skeleton"></span>'.repeat(8);
+}
+
+function renderLocalResult(ev) {
+  const failed = ev.checks.filter((c) => !c.ok).length;
+  state.partial = { format: ev.format, failed };
+  renderTiles(state.partial);
+  $("#checks").innerHTML = ev.checks.map((c) => `
+    <li>${esc(c.label)} <span class="${c.ok ? "" : "flag"}">· ${c.ok ? "respecté" : "à revoir"}</span>${c.ok ? "" : `<small>${esc(c.detail)}</small>`}</li>`).join("");
+  $("#rawText").textContent = ev.cvText || "(aucun texte extrait)";
+}
+
+function renderKeywordsPartial(ev) {
+  const missing = ev.keywords.filter((k) => !k.present).length;
+  Object.assign(state.partial, { motsCles: ev.score, missing, total: ev.keywords.length });
+  renderTiles(state.partial);
+  $("#keywordsHint").textContent = missing
+    ? "Clique sur un mot-clé manquant si tu maîtrises la compétence : il sera ajouté à ton CV adapté."
+    : "Tous les mots-clés attendus sont présents dans ton CV.";
+  state.pendingKeywords = ev.keywords;
+  renderKeywords(ev.keywords);
+}
+
+// Le score monte jusqu'à sa valeur, en même temps que l'anneau se remplit.
+function animateScore(score) {
+  const el = $("#scoreValue");
+  if (reduceMotion) return void (el.textContent = score);
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / 900);
+    el.textContent = Math.round(score * (1 - Math.pow(1 - t, 3)));
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Adaptation lancée en arrière-plan : le clic sur « Adapter » récupère ce travail déjà commencé.
+const adaptBody = () => ({
+  cvText: state.analysis.cvText,
+  jobOffer: state.jobOffer,
+  company: state.company,
+  analysis: { ...state.analysis.ai, keywords: state.analysis.keywords },
+  profile: profile(),
+});
+function prefetchAdapt() {
+  fetch("/api/adapt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(adaptBody()) }).catch(() => {});
 }
 
 // ---------- Résultat ----------
@@ -317,6 +542,29 @@ const normKey = (s) => String(s).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowe
 
 // Une tuile n'est mise en alerte que si son score demande une action.
 const needsAction = (score) => score < 75;
+
+// Les trois tuiles ; une valeur encore inconnue affiche une tuile en attente.
+function renderTiles({ ia, format, failed, motsCles, missing, total }) {
+  const plural = (n, word) => `${n} ${word}${n > 1 ? "s" : ""}`;
+  const tiles = [
+    { label: "Analyse IA", score: ia, value: `${ia}/100`, note: "Avis global sur ton CV" },
+    {
+      label: "Lisibilité", score: format, value: `${format}/100`,
+      note: failed ? `${plural(failed, "point")} technique${failed > 1 ? "s" : ""} à revoir` : "Ton fichier est bien lu",
+    },
+    {
+      label: "Mots-clés", score: motsCles, value: `${motsCles} %`,
+      note: missing ? `${missing} sur ${total} manquant${missing > 1 ? "s" : ""}` : "Tous présents",
+    },
+  ];
+  $("#tiles").innerHTML = tiles.map((t) => t.score == null
+    ? `<div class="tile waiting"><p class="tile-label">${t.label}</p><p class="tile-value"><span class="skeleton-line"></span></p><p class="tile-note">En cours…</p></div>`
+    : `<div class="tile${needsAction(t.score) ? " alert" : ""}">
+        <p class="tile-label">${t.label}</p>
+        <p class="tile-value">${t.value}</p>
+        <p class="tile-note">${t.note}</p>
+      </div>`).join("");
+}
 
 function renderAnalysis(a) {
   const pass = a.verdict === "passe";
@@ -334,29 +582,15 @@ function renderAnalysis(a) {
   $("#nextStep").textContent = a.ai.next_step || a.ai.summary;
 
   // Tuiles
-  const failed = a.checks.filter((c) => !c.ok).length;
   const missing = a.keywords.filter((k) => !k.present).length;
-  const tiles = [
-    { label: "Analyse IA", value: `${a.breakdown.ia}/100`, note: "Avis global sur ton CV", score: a.breakdown.ia },
-    {
-      label: "Lisibilité",
-      value: `${a.breakdown.format}/100`,
-      note: failed ? `${failed} point${failed > 1 ? "s" : ""} technique${failed > 1 ? "s" : ""} à revoir` : "Ton fichier est bien lu",
-      score: a.breakdown.format,
-    },
-    {
-      label: "Mots-clés",
-      value: `${a.breakdown.motsCles} %`,
-      note: missing ? `${missing} sur ${a.keywords.length} manquant${missing > 1 ? "s" : ""}` : "Tous présents",
-      score: a.breakdown.motsCles,
-    },
-  ];
-  $("#tiles").innerHTML = tiles.map((t) => `
-    <div class="tile${needsAction(t.score) ? " alert" : ""}">
-      <p class="tile-label">${t.label}</p>
-      <p class="tile-value">${t.value}</p>
-      <p class="tile-note">${t.note}</p>
-    </div>`).join("");
+  renderTiles({
+    ia: a.breakdown.ia,
+    format: a.breakdown.format,
+    failed: a.checks.filter((c) => !c.ok).length,
+    motsCles: a.breakdown.motsCles,
+    missing,
+    total: a.keywords.length,
+  });
 
   // Corrections : triées par impact, doublons retirés.
   const seen = new Set();
@@ -407,8 +641,8 @@ $("#keywords").addEventListener("click", (ev) => {
   const added = !state.addedKeywords.has(kw);
   if (added) state.addedKeywords.add(kw);
   else state.addedKeywords.delete(kw);
-  renderKeywords(state.analysis.keywords);
-  if (!$("#adapted").classList.contains("hidden")) syncAddedSkill(kw, added);
+  renderKeywords(state.analysis?.keywords || state.pendingKeywords || []);
+  if (state.reachable.has("#adapted")) syncAddedSkill(kw, added);
 });
 
 // Si le CV adapté est déjà affiché, on met aussi à jour son éditeur.
@@ -450,15 +684,19 @@ function renderRefine(a) {
 // Bloc « Prochaine étape » en bas du résultat : une action principale selon la situation.
 function renderNextAction(a) {
   const toRefine = (focus) => () => {
-    scrollToEl("#refine");
-    setTimeout(() => focus?.focus({ preventScroll: true }), 500);
+    goTo("#refine");
+    setTimeout(() => focus?.focus({ preventScroll: true }), 350);
   };
   const adapt = () => $("#adaptBtn").click();
   const config = a.hasOffer
     ? {
         text: "Adapte ton CV à cette offre et récupère ta lettre de motivation.",
         primary: ["Adapter mon CV et créer ma lettre", adapt],
-        secondary: ["Ajouter des infos d'abord", () => { $("#profileBox").open = true; toRefine($("#profileBox summary"))(); }],
+        secondary: ["Ajouter des infos d'abord", () => {
+          $("#profileBox").open = true;
+          toRefine($("#profileBox summary"))();
+          setTimeout(() => scrollToEl("#profileBox"), 350);
+        }],
       }
     : {
         text: "Ajoute l'offre visée pour vérifier les mots-clés qui comptent vraiment.",
@@ -508,12 +746,33 @@ async function importOffer() {
     const what = [offer.title, offer.company].filter(Boolean).map(esc).join(" · ") || "Annonce";
     urlStatus("ok", `✓ ${what} importée depuis ${esc(offer.source)}. Vérifie le texte ci-dessous, puis relance l'analyse.`);
     $("#reanalyzeBtn").classList.replace("secondary", "primary");
+    prefetchKeywords();
   } catch (e) {
     urlStatus("error", esc(e.message));
   } finally {
     setLoading(importBtn, false);
   }
 }
+
+// Dès que l'offre est connue, ses mots-clés sont préparés en arrière-plan :
+// la relance de l'analyse n'a plus qu'à attendre le diagnostic.
+let lastPrefetchedOffer = "";
+function prefetchKeywords() {
+  const jobOffer = $("#jobOffer").value.trim();
+  const key = `${jobOffer}|${$("#company").value.trim()}`;
+  if (!state.file || jobOffer.length < 200 || key === lastPrefetchedOffer) return;
+  lastPrefetchedOffer = key;
+  fetch("/api/offer/keywords", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ jobOffer, company: $("#company").value.trim() }),
+  }).catch(() => {});
+}
+let prefetchTimer;
+["#jobOffer", "#company"].forEach((id) => $(id).addEventListener("input", () => {
+  clearTimeout(prefetchTimer);
+  prefetchTimer = setTimeout(prefetchKeywords, 2000);
+}));
 
 importBtn.addEventListener("click", importOffer);
 urlInput.addEventListener("keydown", (ev) => {
@@ -532,13 +791,8 @@ $("#adaptBtn").addEventListener("click", async () => {
   if ($("#jobOffer").value.trim() !== state.jobOffer && !(await runAnalysis())) return;
   startLoader("adapt");
   try {
-    state.adapted = await api("/api/adapt", {
-      cvText: state.analysis.cvText,
-      jobOffer: state.jobOffer,
-      company: state.company,
-      analysis: { ...state.analysis.ai, keywords: state.analysis.keywords },
-      profile: profile(),
-    });
+    // Même demande que celle lancée en avance : le serveur renvoie ce travail déjà commencé.
+    state.adapted = await api("/api/adapt", adaptBody());
   } catch (e) {
     await stopLoader(false);
     toast(e.message);
@@ -546,9 +800,8 @@ $("#adaptBtn").addEventListener("click", async () => {
   }
   await stopLoader(true);
   renderAdapted();
-  show("#adapted");
-  setStep(3);
-  scrollToEl("#adapted");
+  state.reachable.add("#adapted");
+  goTo("#adapted");
   await recheck();
 });
 
@@ -891,16 +1144,15 @@ $("#anotherOfferBtn").addEventListener("click", () => {
   state.adapted = null;
   state.jobOffer = "";
   state.company = "";
-  show("#adapted", false);
-  show("#results", false);
   show("#questionsBox", false);
   $("#refineIntro").textContent = "Donne la nouvelle offre : ton CV sera analysé pour elle, avec tes infos d'alternance déjà remplies.";
   $("#refine").classList.add("highlight");
   $("#reanalyzeBtn").classList.replace("secondary", "primary");
+  // L'ancien résultat ne correspond plus à la nouvelle offre : on ne peut plus y revenir.
+  state.reachable = new Set(["#refine"]);
   state.maxStep = 2;
-  setStep(2);
-  scrollToEl("#refine");
-  setTimeout(() => $("#offerUrl").focus({ preventScroll: true }), 500);
+  goTo("#refine");
+  setTimeout(() => $("#offerUrl").focus({ preventScroll: true }), 350);
 });
 
 // ---------- Lettre de motivation ----------
@@ -923,14 +1175,17 @@ function readLetter() {
   return { subject: g("subject"), greeting: g("greeting"), paragraphs: g("paragraphs").split(/\n\s*\n/).map((p) => p.replace(/\s*\n\s*/g, " ").trim()).filter(Boolean), closing: g("closing") };
 }
 
-$("#backBtn").addEventListener("click", () => scrollToEl("#results"));
+$("#backBtn").addEventListener("click", () => goTo(neighbour(-1) || "#refine"));
+$("#refineBackBtn").addEventListener("click", () => goTo("#results"));
 
 $("#restartBtn").addEventListener("click", () => {
   $("#refineForm").reset();
   Object.assign(state, { file: null, analysis: null, adapted: null, jobOffer: "", company: "", checks: null });
   state.addedKeywords.clear();
   $("#letterEditor").innerHTML = "";
-  ["#results", "#refine", "#adapted"].forEach((id) => show(id, false));
+  PANELS.forEach((id) => show(id, false));
+  state.panel = null;
+  state.reachable = new Set();
   $("#hero").classList.remove("compact");
   $("#urlStatus").textContent = "";
   $("#reanalyzeBtn").classList.replace("primary", "secondary");

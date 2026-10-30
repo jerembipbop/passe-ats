@@ -56,7 +56,26 @@
 
   <main class="wrap">
     <!-- Résultat -->
-    <section id="results" class="card result hidden" aria-labelledby="resultTitle">
+    <section id="results" class="card panel result hidden" aria-labelledby="resultTitle">
+      <!-- Suivi de l'analyse : vraies étapes, temps écoulé et quiz pendant l'attente -->
+      <div class="scan" id="scan" aria-live="polite">
+        <div class="scan-head">
+          <p class="scan-title" id="scanTitle">Analyse en cours</p>
+          <p class="scan-time" id="scanTime"></p>
+        </div>
+        <div class="progress" id="scanBar" role="progressbar" aria-label="Progression de l'analyse" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <div class="progress-fill"></div>
+        </div>
+        <ol class="scan-steps" id="scanSteps">
+          <li data-scan="read">Lecture du fichier comme un ATS</li>
+          <li data-scan="format">Tests de lisibilité</li>
+          <li data-scan="keywords">Mots-clés attendus</li>
+          <li data-scan="diagnosis">Diagnostic de l'IA</li>
+        </ol>
+        <div class="quiz" id="scanQuiz"></div>
+        <button type="button" class="btn secondary hidden" id="scanRetry">Relancer l'analyse</button>
+      </div>
+
       <!-- En-tête : score, verdict et prochaine action -->
       <div class="result-head">
         <div class="ring" aria-hidden="true">
@@ -117,7 +136,7 @@
     </section>
 
     <!-- Affinage -->
-    <section id="refine" class="card hidden">
+    <section id="refine" class="card panel hidden">
       <header class="section-head">
         <p class="step-label">Étape 2 sur 3</p>
         <h2>Précise ta candidature</h2>
@@ -166,6 +185,7 @@
         </details>
 
         <div class="actions">
+          <button type="button" class="btn link back-link" id="refineBackBtn">← Revoir le résultat</button>
           <button type="submit" class="btn secondary" id="reanalyzeBtn">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg>
             Relancer l'analyse
@@ -179,7 +199,7 @@
     </section>
 
     <!-- CV adapté et lettre -->
-    <section id="adapted" class="card hidden">
+    <section id="adapted" class="card panel hidden">
       <header class="section-head">
         <p class="step-label">Étape 3 sur 3</p>
         <h2>Ton CV adapté et ta lettre</h2>
@@ -280,7 +300,7 @@
       </div>
 
       <div class="actions">
-        <button class="btn link" id="backBtn" type="button">↑ Retour à l'analyse</button>
+        <button class="btn link" id="backBtn" type="button">← Retour à l'offre</button>
         <button class="btn link" id="restartBtn" type="button">Changer de CV et tout recommencer</button>
       </div>
     </section>
@@ -300,13 +320,7 @@
       <p class="loader-stage" id="loaderStage" aria-live="polite"></p>
       <p class="loader-meta" id="loaderMeta"></p>
 
-      <div class="tip">
-        <p class="tip-label">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.3 1 2.1V17h6v-.2c0-.8.4-1.6 1-2.1A7 7 0 0 0 12 2z"/></svg>
-          Le saviez-tu ? <span id="tipCount"></span>
-        </p>
-        <p class="tip-text"><span id="tipText"></span><span class="caret" aria-hidden="true"></span></p>
-      </div>
+      <div class="quiz" id="loaderQuiz"></div>
     </div>
   </div>
   <div class="toast hidden" id="toast" role="alert"></div>

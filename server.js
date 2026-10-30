@@ -4,7 +4,8 @@ import multer from "multer";
 import JSZip from "jszip";
 import { extractCv } from "./lib/extract.js";
 import { runFormatChecks, keywordCoverage, combinedScore, verdictFor } from "./lib/atsChecks.js";
-import { analyzeCv, adaptCv } from "./lib/ai.js";
+import { analyzeKeywords, analyzeDiagnosis, adaptCv } from "./lib/ai.js";
+import { MemoryCache, fingerprint } from "./lib/cache.js";
 import { renderCvPdf, renderLetterPdf, letterToText, renderPreview } from "./lib/pdf.js";
 import { importOffer } from "./lib/jobOffer.js";
 
@@ -31,9 +32,34 @@ function scoreReport(text, extracted, keywords, aiScore) {
   };
 }
 
+// Réponses de l'IA gardées en mémoire : une demande identique (même CV, même offre, mêmes
+// infos) est servie tout de suite, et une demande en cours est partagée au lieu d'être relancée.
+const keywordCache = new MemoryCache(100);
+const analysisCache = new MemoryCache(50);
+const adaptCache = new MemoryCache(20);
+
+function cached(cache, key, run) {
+  let pending = cache.get(key);
+  if (!pending) {
+    pending = run();
+    cache.set(key, pending);
+    pending.catch(() => cache.delete(key));
+  }
+  return pending;
+}
+
+// Les mots-clés ne dépendent que de l'offre (ou du CV quand il n'y a pas d'offre).
+const keywordsFor = ({ cvText, jobOffer, company, onAttempt }) =>
+  cached(keywordCache, jobOffer ? fingerprint("offre", jobOffer, company) : fingerprint("cv", cvText), () =>
+    analyzeKeywords({ cvText, jobOffer, company, onAttempt })
+  );
+
+// Réponse progressive (une ligne JSON par étape) : les résultats calculés localement
+// s'affichent en moins d'une seconde, puis les mots-clés, puis le diagnostic de l'IA.
 app.post("/api/analyze", upload.single("cv"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "Ajoute ton CV (PDF ou Word)." });
   const jobOffer = (req.body.jobOffer || "").trim();
+  const company = (req.body.company || "").trim();
   if (jobOffer && jobOffer.length < 50) return res.status(400).json({ error: "L'offre est trop courte : colle le texte complet de l'annonce." });
   let profile = {};
   try {
@@ -46,21 +72,54 @@ app.post("/api/analyze", upload.single("cv"), async (req, res) => {
   } catch (e) {
     return res.status(400).json({ error: `Impossible de lire ce fichier (${e.message}). Vérifie qu'il s'agit bien d'un PDF ou d'un .docx non protégé.` });
   }
-  const ai = await analyzeCv({
-    cvText: extracted.text,
-    checks: runFormatChecks(extracted).checks,
-    jobOffer,
-    company: req.body.company,
-    profile,
-  });
+  const cvText = extracted.text;
+  const format = runFormatChecks(extracted);
 
-  res.json({
-    ...scoreReport(extracted.text, extracted, ai.keywords, ai.score),
-    ai,
-    hasOffer: !!jobOffer,
-    cvText: extracted.text,
-    company: req.body.company || ai.detected_company,
-  });
+  res.type("application/x-ndjson").setHeader("Cache-Control", "no-store");
+  const send = (event) => !res.writableEnded && !res.destroyed && res.write(`${JSON.stringify(event)}\n`);
+  send({ type: "local", checks: format.checks, format: format.score, cvText, hasOffer: !!jobOffer });
+
+  const key = fingerprint(cvText, jobOffer, company, profile);
+  try {
+    const analysis = await cached(analysisCache, key, async () => {
+      const keywordsPromise = keywordsFor({ cvText, jobOffer, company, onAttempt: (model) => send({ type: "stage", stage: "keywords", model }) });
+      const diagnosisPromise = analyzeDiagnosis({
+        cvText, checks: format.checks, jobOffer, company, profile,
+        onAttempt: (model) => send({ type: "stage", stage: "diagnosis", model }),
+      });
+      keywordsPromise.then((kw) => {
+        const coverage = keywordCoverage(cvText, kw.keywords);
+        send({ type: "keywords", keywords: coverage.keywords, score: coverage.score, detected_job_title: kw.detected_job_title });
+      }, () => {});
+      const [kw, diagnosis] = await Promise.all([keywordsPromise, diagnosisPromise]);
+      const ai = {
+        ...diagnosis,
+        detected_job_title: kw.detected_job_title,
+        detected_company: kw.detected_company,
+        keywords: kw.keywords,
+        models: { keywords: kw.model, diagnosis: diagnosis.model },
+      };
+      return {
+        ...scoreReport(cvText, extracted, kw.keywords, diagnosis.score),
+        ai,
+        hasOffer: !!jobOffer,
+        cvText,
+        company: company || kw.detected_company,
+      };
+    });
+    send({ type: "done", analysis });
+  } catch (e) {
+    console.error(e.message);
+    send({ type: "error", error: e.message || "Erreur inattendue.", status: e.status || 500 });
+  }
+  res.end();
+});
+
+// Préparation anticipée : dès qu'une offre est connue, ses mots-clés sont calculés en arrière-plan.
+app.post("/api/offer/keywords", (req, res) => {
+  const jobOffer = (req.body.jobOffer || "").trim();
+  if (jobOffer.length >= 50) keywordsFor({ jobOffer, company: (req.body.company || "").trim() }).catch(() => {});
+  res.json({ ok: true });
 });
 
 app.post("/api/offer/import", async (req, res) => {
@@ -68,10 +127,12 @@ app.post("/api/offer/import", async (req, res) => {
   res.json(await importOffer(req.body.url));
 });
 
+// Le navigateur lance l'adaptation en avance dès l'analyse terminée ; le clic sur
+// « Adapter » récupère alors la même demande, déjà en cours ou terminée.
 app.post("/api/adapt", async (req, res) => {
   const { cvText, jobOffer, company, analysis, profile } = req.body;
-  const result = await adaptCv({ cvText, jobOffer, company, analysis, profile });
-  res.json(result);
+  const key = fingerprint(cvText, jobOffer, company, profile, analysis?.priority_fixes, analysis?.keywords?.map((k) => [k.keyword, k.present]));
+  res.json(await cached(adaptCache, key, () => adaptCv({ cvText, jobOffer, company, analysis, profile })));
 });
 
 // Régénère le PDF puis le relit comme un ATS pour confirmer le nouveau score.
